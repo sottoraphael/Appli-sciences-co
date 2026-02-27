@@ -1,0 +1,144 @@
+import streamlit as st
+import google.generativeai as genai
+import PyPDF2
+
+# --- CONFIGURATION DE LA PAGE ---
+st.set_page_config(page_title="Tuteur Socratique", page_icon="🧠", layout="centered")
+st.title("🧠 Ton Tuteur de Révision Socratique")
+st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle (nom, prénom) dans ce chat.*")
+
+# --- INITIALISATION DE L'API GEMINI ---
+# L'application va chercher la clé secrète que vous aurez configurée sur le serveur
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+else:
+    st.error("⚠️ Clé API introuvable. Le professeur doit configurer les 'Secrets' de l'application.")
+    st.stop()
+
+# --- FONCTION POUR LIRE LES PDF ---
+def extraire_texte_pdf(fichier):
+    lecteur = PyPDF2.PdfReader(fichier)
+    texte = ""
+    for page in lecteur.pages:
+        texte += page.extract_text() + "\n"
+    return texte
+
+# --- BARRE LATÉRALE (RÉGLAGES DE L'ÉLÈVE) ---
+with st.sidebar:
+    st.header("⚙️ Paramètres de révision")
+    
+    niveau_eleve = st.radio("Ton niveau sur ce chapitre :", ["Novice", "Avancé"])
+    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation (Bases)", "Mode B : Compréhension (Profondeur)"])
+    
+    st.markdown("---")
+    st.header("📚 Ton Cours")
+    fichier_upload = st.file_uploader("Glisse ton cours ici (PDF ou TXT)", type=["pdf", "txt"])
+    texte_manuel = st.text_area("...ou copie-colle ton texte ici :")
+
+# --- PRÉPARATION DU TEXTE DU COURS ---
+texte_cours = ""
+if fichier_upload is not None:
+    if fichier_upload.name.endswith('.pdf'):
+        texte_cours = extraire_texte_pdf(fichier_upload)
+    else:
+        texte_cours = fichier_upload.read().decode("utf-8")
+elif texte_manuel:
+    texte_cours = texte_manuel
+
+# --- LE CERVEAU PÉDAGOGIQUE (VOTRE PROMPT) ---
+prompt_systeme = f"""
+# RÔLE & OBJECTIF
+Tu es un tuteur personnel socratique et un expert en ingénierie pédagogique cognitive. Ta mission est de faire réviser l'élève de manière interactive.
+Tu dois te baser exclusivement sur le texte ou les documents fournis par l'élève. S'il n'y a pas de cours fourni, demande-lui d'en fournir un avant de commencer.
+
+# CONTEXTE DE LA SESSION
+* Niveau de l'élève : {niveau_eleve}
+* Objectif pédagogique : {objectif_eleve}
+* Cours à réviser : {texte_cours}
+
+# RÈGLES DE FONCTIONNEMENT INTERACTIF (Strictes)
+1. Pose UNE SEULE question à la fois. N'envoie jamais une liste de questions.
+2. Attends la réponse de l'élève.
+3. Ne donne jamais la réponse directement avant que l'élève n'ait essayé. Guide-le.
+
+# LA "CONSTITUTION" PÉDAGOGIQUE (Selon l'objectif)
+
+## SI MODE A : ANCRAGE & MÉMORISATION (Testing Effect)
+* Règle de l'Information Minimale : Une question = Un seul savoir atomique.
+* STRATÉGIE DES LEURRES : Si tu proposes des choix, utilise exclusivement ces 3 stratégies (aucun remplissage aléatoire) :
+   1. La Confusion de Concepts : Terme proche mais définition différente.
+   2. L'Erreur de "Bon Sens" : La réponse intuitive mais fausse.
+   3. L'Inversion de Causalité : Inverse la cause et l'effet ou l'ordre des étapes.
+* RÈGLE D'HOMOGÉNÉITÉ : Les leurres doivent avoir la même longueur et structure.
+* Feedback : Explique toujours POURQUOI la réponse est juste ou fausse en démontant le leurre.
+
+## SI MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
+* Principe : L'élève doit construire du sens (Processus SOI : Sélectionner, Organiser, Intégrer l'information).
+* Échafaudage :
+   * Si NOVICE : "Completion Problem Effect" (Textes à trous, schémas à compléter, étapes guidées).
+   * Si AVANCÉ : Prompts ouverts ("Analysez...", "Critiquez...").
+* MENU GÉNÉRATIF (Choisis la stratégie pertinente) :
+   1. Transformation : Convertir un texte en schéma, tableau ou processus.
+   2. Comparaison Structurée : Ressemblances / Différences / Limites.
+   3. Auto-explication : Verbaliser le pourquoi d'une étape.
+   4. Cartographie : Hiérarchiser les concepts.
+   5. Contre-Exemple : Identifier les limites de la règle.
+
+# GARDE-FOUS & PROPRETÉ
+* Fond : Base-toi exclusivement sur le texte fourni.
+* Forme : Ne laisse jamais de balises techniques type [cite] ou [source].
+
+# DÉMARRAGE
+Lors de ton tout premier message : salue l'élève, confirme que tu as bien analysé son cours, et pose directement la première question.
+"""
+
+# --- GESTION DU CHAT ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Afficher l'historique des messages
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# --- LANCEMENT DE L'IA ---
+if texte_cours:
+    # Création du modèle avec vos instructions
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=prompt_systeme
+    )
+    
+    # Lancement de la session de chat IA
+    chat = model.start_chat(history=[])
+    
+    # Message de démarrage automatique si le chat est vide
+    if not st.session_state.messages:
+        with st.spinner("Le tuteur lit ton cours..."):
+            reponse_initiale = chat.send_message("Bonjour, j'ai fourni mon cours. Peux-tu te présenter et me poser la première question selon mes paramètres ?")
+            st.session_state.messages.append({"role": "assistant", "content": reponse_initiale.text})
+            st.rerun()
+
+    # Zone de saisie pour l'élève
+    if prompt_eleve := st.chat_input("Écris ta réponse ici..."):
+        # Afficher le message de l'élève
+        with st.chat_message("user"):
+            st.markdown(prompt_eleve)
+        st.session_state.messages.append({"role": "user", "content": prompt_eleve})
+        
+        # Obtenir et afficher la réponse de l'IA
+        with st.chat_message("assistant"):
+            with st.spinner("Le tuteur réfléchit..."):
+                # On recrée l'historique pour l'API Gemini à partir de notre session
+                historique_gemini = []
+                for msg in st.session_state.messages[:-1]: # Tout sauf le dernier message de l'user
+                    role = "user" if msg["role"] == "user" else "model"
+                    historique_gemini.append({"role": role, "parts": [msg["content"]]})
+                
+                chat.history = historique_gemini
+                reponse = chat.send_message(prompt_eleve)
+                st.markdown(reponse.text)
+                
+        st.session_state.messages.append({"role": "assistant", "content": reponse.text})
+else:
+    st.info("👈 Commence par sélectionner ton niveau, ton objectif, et charge un cours dans la barre latérale gauche pour activer le tuteur !")
