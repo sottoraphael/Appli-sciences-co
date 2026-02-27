@@ -135,7 +135,7 @@ if texte_cours:
             st.rerun()
 
     # Zone de saisie pour l'élève
-    if prompt := st.chat_input("Ta réponse..."):
+   if prompt := st.chat_input("Ta réponse..."):
         # 1. On affiche le message normal pour l'élève
         st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -148,7 +148,7 @@ if texte_cours:
             hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat.history = hist
             
-            # 3. L'IA génère sa réponse
+            # 3. L'IA génère sa réponse (On utilise bien "prompt_enrichi" ici !)
             reponse = chat.send_message(prompt_enrichi)
             
             # 4. On affiche et on sauvegarde
@@ -172,6 +172,7 @@ if texte_cours:
 else:
 
     st.info("👈 Commence par sélectionner ton niveau, ton objectif, et charge un cours dans la barre latérale gauche pour activer le tuteur !")
+
 
 
 
