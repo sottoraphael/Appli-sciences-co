@@ -105,7 +105,7 @@ for message in st.session_state.messages:
 if texte_cours:
     # Création du modèle avec vos instructions
     model = genai.GenerativeModel(
-        model_name="models/gemini-1.5-flash",
+        model_name="gemini-2.5-flash",
         system_instruction=prompt_systeme
     )
     
@@ -143,4 +143,5 @@ if texte_cours:
 else:
 
     st.info("👈 Commence par sélectionner ton niveau, ton objectif, et charge un cours dans la barre latérale gauche pour activer le tuteur !")
+
 
