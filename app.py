@@ -141,4 +141,5 @@ if texte_cours:
                 
         st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
+
     st.info("👈 Commence par sélectionner ton niveau, ton objectif, et charge un cours dans la barre latérale gauche pour activer le tuteur !")
