@@ -135,11 +135,21 @@ if texte_cours:
             st.rerun()
 
     # Zone de saisie pour l'élève
-    if prompt_eleve := st.chat_input("Écris ta réponse ici..."):
-        # Afficher le message de l'élève
-        with st.chat_message("user"):
-            st.markdown(prompt_eleve)
-        st.session_state.messages.append({"role": "user", "content": prompt_eleve})
+    if prompt := st.chat_input("Ta réponse..."):
+        # 1. On affiche le message normal pour l'élève
+        st.chat_message("user").markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # 2. INJECTION INVISIBLE : On glisse un rappel strict à l'IA à la fin du message
+        prompt_enrichi = f"{prompt}\n\n[DIRECTIVE SYSTÈME STRICTE : L'élève est actuellement en {objectif_eleve} et niveau {niveau_eleve}. Tu DOIS impérativement changer ta façon de poser la prochaine question pour respecter la Constitution Pédagogique de ce mode, même si cela casse la dynamique de tes messages précédents.]"
+        
+        with st.chat_message("assistant"):
+            hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
+            chat.history = hist
+            # 3. L'IA reçoit le message avec la directive cachée
+            res = chat.send_message(prompt_enrichi)
+            st.markdown(res.text)
+            st.session_state.messages.append({"role": "assistant", "content": res.text})
         
         # Obtenir et afficher la réponse de l'IA
         with st.chat_message("assistant"):
@@ -158,6 +168,7 @@ if texte_cours:
 else:
 
     st.info("👈 Commence par sélectionner ton niveau, ton objectif, et charge un cours dans la barre latérale gauche pour activer le tuteur !")
+
 
 
 
