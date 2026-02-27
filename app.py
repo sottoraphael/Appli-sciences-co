@@ -46,7 +46,6 @@ elif texte_manuel:
     texte_cours = texte_manuel
 
 # --- LE CERVEAU PÉDAGOGIQUE (VOTRE PROMPT) ---
-prompt_systeme = f"""
 if texte_cours:
     # 1. Base commune & Rôle
     prompt_systeme = f"""
@@ -159,6 +158,7 @@ if texte_cours:
 else:
 
     st.info("👈 Commence par sélectionner ton niveau, ton objectif, et charge un cours dans la barre latérale gauche pour activer le tuteur !")
+
 
 
 
