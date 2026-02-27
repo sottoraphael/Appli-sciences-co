@@ -115,7 +115,7 @@ if texte_cours:
 
     # Configuration du modèle
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash", # Laissez 1.5-flash ici ou mettez 2.5-pro si vous avez activé la facturation Google
+        model_name="gemini-2.5-flash", # Laissez 1.5-flash ici ou mettez 2.5-pro si vous avez activé la facturation Google
         system_instruction=prompt_systeme
     )
     chat = model.start_chat(history=[])
@@ -147,3 +147,4 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
