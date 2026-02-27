@@ -5,14 +5,13 @@ import PyPDF2
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Tuteur Socratique", page_icon="🧠", layout="centered")
 st.title("🧠 Ton Tuteur de Révision Socratique")
-st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle (nom, prénom) dans ce chat.*")
+st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
 # --- INITIALISATION DE L'API GEMINI ---
-# L'application va chercher la clé secrète que vous aurez configurée sur le serveur
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("⚠️ Clé API introuvable. Le professeur doit configurer les 'Secrets' de l'application.")
+    st.error("⚠️ Clé API introuvable. Configurez 'GEMINI_API_KEY' dans les Secrets.")
     st.stop()
 
 # --- FONCTION POUR LIRE LES PDF ---
@@ -23,21 +22,20 @@ def extraire_texte_pdf(fichier):
         texte += page.extract_text() + "\n"
     return texte
 
-# --- BARRE LATÉRALE (RÉGLAGES DE L'ÉLÈVE) ---
+# --- BARRE LATÉRALE (RÉGLAGES) ---
 with st.sidebar:
-    st.header("⚙️ Paramètres de révision")
-    
-    niveau_eleve = st.radio("Ton niveau sur ce chapitre :", ["Novice", "Avancé"])
-    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation (Bases)", "Mode B : Compréhension (Profondeur)"])
+    st.header("⚙️ Paramètres")
+    niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"])
+    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"])
     
     st.markdown("---")
     st.header("📚 Ton Cours")
-    fichier_upload = st.file_uploader("Glisse ton cours ici (PDF ou TXT)", type=["pdf", "txt"])
-    texte_manuel = st.text_area("...ou copie-colle ton texte ici :")
+    fichier_upload = st.file_uploader("Cours (PDF/TXT)", type=["pdf", "txt"])
+    texte_manuel = st.text_area("Ou colle ton texte ici :")
 
-# --- PRÉPARATION DU TEXTE DU COURS ---
+# --- EXTRACTION DU CONTENU ---
 texte_cours = ""
-if fichier_upload is not None:
+if fichier_upload:
     if fichier_upload.name.endswith('.pdf'):
         texte_cours = extraire_texte_pdf(fichier_upload)
     else:
@@ -45,7 +43,7 @@ if fichier_upload is not None:
 elif texte_manuel:
     texte_cours = texte_manuel
 
-# --- LE CERVEAU PÉDAGOGIQUE (VOTRE PROMPT) ---
+# --- CONSTRUCTION DYNAMIQUE DU PROMPT (VERSION INTÉGRALE) ---
 if texte_cours:
     # 1. Base commune & Rôle
     prompt_systeme = f"""
@@ -107,35 +105,28 @@ if texte_cours:
     * PROPRETÉ : Ne laisse jamais de balises techniques type [cite] ou [source] dans le résultat final.
     """
 
-# --- GESTION DU CHAT ---
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    # --- GESTION DU CHAT ---
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-# Afficher l'historique des messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-# --- LANCEMENT DE L'IA ---
-if texte_cours:
-    # Création du modèle avec vos instructions
+    # Configuration du modèle
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-pro",
+        model_name="gemini-1.5-flash", # Laissez 1.5-flash ici ou mettez 2.5-pro si vous avez activé la facturation Google
         system_instruction=prompt_systeme
     )
-    
-    # Lancement de la session de chat IA
     chat = model.start_chat(history=[])
-    
-    # Message de démarrage automatique si le chat est vide
+
     if not st.session_state.messages:
-        with st.spinner("Le tuteur lit ton cours..."):
-            reponse_initiale = chat.send_message("Bonjour, j'ai fourni mon cours. Peux-tu te présenter et me poser la première question selon mes paramètres ?")
-            st.session_state.messages.append({"role": "assistant", "content": reponse_initiale.text})
+        with st.spinner("Analyse du cours..."):
+            res = chat.send_message("Présente-toi brièvement et pose la première question selon mes réglages.")
+            st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.rerun()
 
-    # Zone de saisie pour l'élève
-   if prompt := st.chat_input("Ta réponse..."):
+    if prompt := st.chat_input("Ta réponse..."):
         # 1. On affiche le message normal pour l'élève
         st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -148,36 +139,11 @@ if texte_cours:
             hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat.history = hist
             
-            # 3. L'IA génère sa réponse (On utilise bien "prompt_enrichi" ici !)
+            # 3. L'IA génère sa réponse
             reponse = chat.send_message(prompt_enrichi)
             
             # 4. On affiche et on sauvegarde
             st.markdown(reponse.text)
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
-        
-        # Obtenir et afficher la réponse de l'IA
-        with st.chat_message("assistant"):
-            with st.spinner("Le tuteur réfléchit..."):
-                # On recrée l'historique pour l'API Gemini à partir de notre session
-                historique_gemini = []
-                for msg in st.session_state.messages[:-1]: # Tout sauf le dernier message de l'user
-                    role = "user" if msg["role"] == "user" else "model"
-                    historique_gemini.append({"role": role, "parts": [msg["content"]]})
-                
-                chat.history = historique_gemini
-                reponse = chat.send_message(prompt_eleve)
-                st.markdown(reponse.text)
-                
-        st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
-
-    st.info("👈 Commence par sélectionner ton niveau, ton objectif, et charge un cours dans la barre latérale gauche pour activer le tuteur !")
-
-
-
-
-
-
-
-
-
+    st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
