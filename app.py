@@ -68,6 +68,19 @@ if texte_cours:
         * RÈGLE D'HOMOGÉNÉITÉ : Les leurres doivent avoir la même longueur, la même structure grammaticale et le même niveau de langage que la bonne réponse.
         * Feedback : Explique toujours POURQUOI la réponse est juste ou fausse.
         """
+        
+        # --- ÉCHAFAUDAGE SPÉCIFIQUE AU MODE A ---
+        if niveau_eleve == "Novice":
+            prompt_systeme += """
+            # ÉCHAFAUDAGE (NOVICE)
+            * Utilise exclusivement des questions à choix multiples (QCM) en appliquant strictement la stratégie des leurres ci-dessus pour faciliter la reconnaissance.
+            """
+        else:
+            prompt_systeme += """
+            # ÉCHAFAUDAGE (AVANCÉ)
+            * Utilise exclusivement le "Rappel Libre". Pose une question directe et précise sans proposer AUCUN choix, indice ou leurre. L'élève doit formuler la réponse seul.
+            """
+
     else:
         prompt_systeme += """
         # LA "CONSTITUTION" PÉDAGOGIQUE
@@ -81,16 +94,17 @@ if texte_cours:
            5. Contre-Exemple : Identifier les limites de la règle.
         """
 
-    if niveau_eleve == "Novice":
-        prompt_systeme += """
-        # ÉCHAFAUDAGE
-        * Pour les NOVICES : Utilise le "Completion Problem Effect" (Schémas à compléter, Textes à trous, Tableaux partiels).
-        """
-    else:
-        prompt_systeme += """
-        # ÉCHAFAUDAGE
-        * Pour les EXPERTS : Utilise des prompts ouverts ("Analysez...", "Critiquez...").
-        """
+        # --- ÉCHAFAUDAGE SPÉCIFIQUE AU MODE B ---
+        if niveau_eleve == "Novice":
+            prompt_systeme += """
+            # ÉCHAFAUDAGE (NOVICE)
+            * Utilise le "Completion Problem Effect" (Schémas à compléter, Textes à trous, Tableaux partiels fournis par tes soins pour réduire la charge cognitive).
+            """
+        else:
+            prompt_systeme += """
+            # ÉCHAFAUDAGE (AVANCÉ)
+            * Utilise des prompts ouverts ("Analysez...", "Critiquez...", "Crée un tableau comparatif complet"). Ne donne aucune structure de départ, laisse l'élève l'organiser.
+            """
 
     prompt_systeme += """
     # GARDE-FOUS
@@ -140,3 +154,4 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
