@@ -113,38 +113,51 @@ if texte_cours:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Configuration du modèle
+# Configuration du modèle
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash", # Laissez 1.5-flash ici ou mettez 2.5-pro si vous avez activé la facturation Google
+        model_name="gemini-1.5-flash", # Laissez 1.5-flash ici ou mettez 2.5-pro si facturation activée
         system_instruction=prompt_systeme
     )
     chat = model.start_chat(history=[])
 
+    # --- AFFICHAGE DE L'HISTORIQUE ---
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for msg in st.session_state.messages:
+        # On définit l'avatar selon le rôle
+        avatar_chat = "avatar_tuteur.png" if msg["role"] == "assistant" else None # Remplacez None par "avatar_eleve.png" quand vous l'aurez
+        with st.chat_message(msg["role"], avatar=avatar_chat):
+            st.markdown(msg["content"])
+
+    # --- GESTION DU PREMIER MESSAGE ---
     if not st.session_state.messages:
         with st.spinner("Analyse du cours..."):
             res = chat.send_message("Présente-toi brièvement et pose la première question selon mes réglages.")
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.rerun()
 
+    # --- SAISIE ET ENVOI DE LA RÉPONSE DE L'ÉLÈVE ---
     if prompt := st.chat_input("Ta réponse..."):
-        # 1. On affiche le message normal pour l'élève
+        # On affiche le message normal pour l'élève
         st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # 2. INJECTION INVISIBLE : On force l'IA à changer de cap
+        # INJECTION INVISIBLE : On force l'IA à changer de cap
         prompt_enrichi = f"{prompt}\n\n[DIRECTIVE SYSTÈME STRICTE : L'élève est actuellement en {objectif_eleve} et niveau {niveau_eleve}. Tu DOIS impérativement changer ta façon de poser la prochaine question pour respecter la Constitution Pédagogique de ce mode, même si cela casse la dynamique de tes messages précédents.]"
         
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar="avatar_tuteur.png"):
             # On recrée l'historique
             hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat.history = hist
             
-            # 3. L'IA génère sa réponse
+            # L'IA génère sa réponse
             reponse = chat.send_message(prompt_enrichi)
             
-            # 4. On affiche et on sauvegarde
+            # On affiche et on sauvegarde
             st.markdown(reponse.text)
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
