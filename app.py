@@ -57,7 +57,7 @@ st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
 # --- GESTION DU TUTORIEL D'ACCUEIL ---
-@st.dialog("👋 Bienvenue sur ton Tuteur de Révision")
+@st.dialog("👋 Bienvenue sur ton tuteur de révision")
 def afficher_tutoriel():
     st.markdown("""
         <style>
@@ -82,7 +82,7 @@ def afficher_tutoriel():
 
         <b>Comment l'utiliser en 3 étapes :</b><br>
         <span class="step-title">1. ⚙️ Règle ton tuteur</span>
-        Choisis ton mode et ton niveau dans la barre à gauche.<br>
+        Choisis ton mode et ton niveau dans la barre à gauche (tu peux changer à tout moment de la discussion).<br>
         
         <span class="step-title">2. 🧭 Donne-lui ton cours</span>
         Charge ton PDF ou colle ton texte dans la barre à gauche.<br>
@@ -248,6 +248,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
