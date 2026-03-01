@@ -56,26 +56,49 @@ st.markdown("""
 st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
-# --- FENÊTRE D'ACCUEIL (POP-UP) ---
-@st.dialog("👋 Bienvenue sur ton tuteur de révision !")
+# --- FENÊTRE D'ACCUEIL (POP-UP) OPTIMISÉE ---
+@st.dialog("👋 Bienvenue sur ton Tuteur de Révision !")
 def afficher_tutoriel():
+    # Style CSS local pour agrandir le texte du dialogue
     st.markdown("""
-    Ce tuteur intelligent utilise les **sciences cognitives** pour t'aider à réviser plus efficacement. 
+        <style>
+        .big-font {
+            font-size: 1.2rem !important;
+            line-height: 1.6 !important;
+        }
+        .step-title {
+            font-weight: bold;
+            color: #5B9BD5;
+            font-size: 1.3rem;
+            display: block;
+            margin-top: 15px;
+        }
+        </style>
+        <div class="big-font">
+        Ce tuteur intelligent utilise les <b>sciences cognitives</b> pour t'aider à réviser plus efficacement.<br><br>
+        ⚠️ <b>Attention :</b> Il n'est pas là pour te donner les réponses toutes faites, mais pour t'aider à réfléchir et à construire ta propre compréhension !<br><br>
+        <b>Comment l'utiliser en 3 étapes simples :</b><br>
+        
+        <span class="step-title">1. ⚙️ Règle ton tuteur (à gauche)</span>
+        • Choisis ton mode : <b>Mémoriser</b> ou <b>Comprendre</b>.<br>
+        • Indique ton niveau pour que les questions soient adaptées.<br>
+        
+        <span class="step-title">2. 🧭 Donne-lui ton cours</span>
+        • Charge le PDF de ton chapitre.<br>
+        • Ou colle ton texte directement dans la zone prévue.<br>
+        
+        <span class="step-title">3. 💬 Discute</span>
+        • Le tuteur va analyser ton document et te poser des questions.<br>
+        • Réponds-lui directement dans le chat en bas de l'écran !
+        </div>
+        <br>
+    """, unsafe_allow_html=True)
     
-    ⚠️ **Attention :** Il n'est pas là pour te donner les réponses toutes faites, mais pour t'aider à réfléchir et à construire ta propre compréhension !
-
-    **Comment l'utiliser en 3 étapes simples :**
-    
-    1. ⚙️ **Règle ton tuteur (à gauche) :** * Choisis si tu veux **Mémoriser** (retenir les bases) ou **Comprendre** (aller plus loin).
-       * Indique ton niveau pour qu'il adapte ses questions.
-    2. 🧭 **Donne-lui ton cours :** * Charge le PDF de ton chapitre ou colle directement ton texte dans la barre de gauche.
-    3. 💬 **Discute :** * Le tuteur va analyser ton document et te poser des questions. Réponds-lui naturellement dans le chat !
-    """)
-    if st.button("🚀 J'ai compris, c'est parti !"):
+    if st.button("🚀 J'ai compris, c'est parti !", use_container_width=True):
         st.session_state.tutoriel_vu = True
         st.rerun()
 
-# On affiche le pop-up uniquement si l'élève ne l'a pas encore vu
+# Affichage du pop-up
 if "tutoriel_vu" not in st.session_state:
     afficher_tutoriel()
 
@@ -226,6 +249,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
