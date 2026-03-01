@@ -57,7 +57,7 @@ st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
 # --- FENÊTRE D'ACCUEIL (POP-UP) ---
-@st.dialog("👋 Bienvenue sur ton Tuteur de Révision !")
+@st.dialog("👋 Bienvenue sur ton tuteur de révision !")
 def afficher_tutoriel():
     st.markdown("""
     Ce tuteur intelligent utilise les **sciences cognitives** pour t'aider à réviser plus efficacement. 
@@ -226,6 +226,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
