@@ -56,39 +56,39 @@ st.markdown("""
 st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
-# --- FENÊTRE D'ACCUEIL (POP-UP) AVEC EXPLICATION DES MODES ---
-@st.dialog("👋 Bienvenue sur ton tuteur de révision")
+# --- GESTION DU TUTORIEL D'ACCUEIL ---
+@st.dialog("👋 Bienvenue sur ton Tuteur de Révision !")
 def afficher_tutoriel():
     st.markdown("""
         <style>
-        .big-font { font-size: 1.2rem !important; line-height: 1.6 !important; color: #2D3748; }
-        .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.25rem; display: block; margin-top: 12px; }
+        .big-font { font-size: 1.25rem !important; line-height: 1.7 !important; color: #2D3748; }
+        .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.35rem; display: block; margin-top: 15px; }
         .mode-box { 
             background-color: #F0F4F8; 
             padding: 15px; 
-            border-radius: 10px; 
-            margin: 10px 0;
-            border-left: 5px solid #5B9BD5;
+            border-radius: 12px; 
+            margin: 15px 0;
+            border-left: 6px solid #5B9BD5;
         }
         </style>
         <div class="big-font">
-        Ce tuteur utilise les <b>sciences cognitives</b> pour t'aider à réviser efficacement.<br>
+        Ce tuteur utilise les <b>sciences cognitives</b> pour t'aider à réviser sans stress.<br>
         
         <div class="mode-box">
-        <b>💡 Quel mode choisir ?</b><br>
-        • <b>Mémorisation :</b> Idéal pour retenir les définitions et les mots-clés.<br>
-        • <b>Compréhension :</b> Idéal pour apprendre à expliquer le cours et faire des liens.
+        <b>💡 Quel mode choisir ?</b><br><br>
+        • <b>Mémorisation :</b> Pour retenir les définitions et les mots-clés "par cœur".<br><br>
+        • <b>Compréhension :</b> Pour apprendre à expliquer le cours avec tes propres mots.
         </div>
 
-        <b>Comment l'utiliser :</b><br>
+        <b>Comment l'utiliser en 3 étapes :</b><br>
         <span class="step-title">1. ⚙️ Règle ton tuteur</span>
         Choisis ton mode et ton niveau dans la barre à gauche.<br>
         
         <span class="step-title">2. 🧭 Donne-lui ton cours</span>
-        Charge ton PDF ou colle ton texte à gauche.<br>
+        Charge ton PDF ou colle ton texte dans la barre à gauche.<br>
         
         <span class="step-title">3. 💬 Discute</span>
-        Réponds aux questions du tuteur dans le chat en bas !
+        Réponds aux questions directement dans le chat en bas !
         </div>
         <br>
     """, unsafe_allow_html=True)
@@ -96,9 +96,11 @@ def afficher_tutoriel():
     if st.button("🚀 J'ai compris, c'est parti !", use_container_width=True):
         st.session_state.tutoriel_vu = True
         st.rerun()
-# Affichage automatique au lancement
-if st.session_state.tutoriel_ouvert:
+
+# Affichage automatique : on vérifie si la variable existe ET si elle est à True
+if "tutoriel_vu" not in st.session_state:
     afficher_tutoriel()
+    
 # --- INITIALISATION DE L'API GEMINI ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -246,6 +248,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
