@@ -127,7 +127,7 @@ if texte_cours:
     # BOUCLE UNIQUE D'AFFICHAGE (Fini les doublons !)
     for msg in st.session_state.messages:
         # L'IA utilise le hibou, l'élève utilisera le sien plus tard (pour l'instant, c'est l'émoji par défaut)
-        avatar_chat = "avatar_tuteur.png" if msg["role"] == "assistant" else None 
+        avatar_chat = "avatar_tuteur.png" if msg["role"] == "assistant" else "avatar_eleve.png"
         with st.chat_message(msg["role"], avatar=avatar_chat):
             st.markdown(msg["content"])
 
@@ -140,7 +140,7 @@ if texte_cours:
 
     # --- SAISIE ET ENVOI DE LA RÉPONSE DE L'ÉLÈVE ---
     if prompt := st.chat_input("Ta réponse..."):
-        st.chat_message("user").markdown(prompt)
+        st.chat_message("user", avatar="avatar_eleve.png").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         prompt_enrichi = f"{prompt}\n\n[DIRECTIVE SYSTÈME STRICTE : L'élève est actuellement en {objectif_eleve} et niveau {niveau_eleve}. Tu DOIS impérativement changer ta façon de poser la prochaine question pour respecter la Constitution Pédagogique de ce mode, même si cela casse la dynamique de tes messages précédents.]"
@@ -154,4 +154,5 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
