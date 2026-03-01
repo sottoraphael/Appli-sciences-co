@@ -3,8 +3,9 @@ import google.generativeai as genai
 import PyPDF2
 
 # --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="Tuteur Socratique", page_icon="🧠", layout="centered")
-# --- CUSTOM CSS (DESIGN CHALEUREUX) ---
+st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layout="centered")
+
+# --- CUSTOM CSS (DESIGN MODERNE ET LISIBLE) ---
 st.markdown("""
     <style>
     /* Fond de la page principale */
@@ -12,9 +13,23 @@ st.markdown("""
         background-color: #FFFDF9;
     }
     
-    /* Couleur de la barre latérale */
+    /* Couleur de la barre latérale - Moderne et élégant (Gris-Bleu très clair) */
     [data-testid="stSidebar"] {
-        background-color: #F8F4EA;
+        background-color: #F0F4F8; 
+        border-right: 1px solid #E2E8F0; /* Petite bordure propre */
+    }
+    
+    /* Grossir les titres des options "Ton niveau" et "Ton objectif" */
+    .stRadio > label {
+        font-size: 1.25rem !important;
+        font-weight: 600 !important;
+        color: #2D3748 !important;
+        padding-bottom: 5px;
+    }
+    
+    /* Grossir légèrement les choix (Novice, Avancé...) */
+    .stRadio p {
+        font-size: 1.05rem !important;
     }
     
     /* Style des boutons et éléments interactifs */
@@ -27,17 +42,18 @@ st.markdown("""
     
     /* Titres plus doux */
     h1, h2, h3 {
-        color: #4A4A4A;
+        color: #2D3748;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }
     
-    /* Bulles de chat (facultatif : pour arrondir davantage) */
+    /* Bulles de chat */
     [data-testid="stChatMessage"] {
         border-radius: 15px;
     }
     </style>
     """, unsafe_allow_html=True)
-st.title("🧠 Ton Tuteur de Révision Socratique")
+
+st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
 # --- INITIALISATION DE L'API GEMINI ---
@@ -62,7 +78,7 @@ with st.sidebar:
     objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"])
     
     st.markdown("---")
-    st.header("📚 Ton Cours")
+    st.header("🧭 Ton Cours")
     fichier_upload = st.file_uploader("Cours (PDF/TXT)", type=["pdf", "txt"])
     texte_manuel = st.text_area("Ou colle ton texte ici :")
 
@@ -187,6 +203,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
