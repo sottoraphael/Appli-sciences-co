@@ -56,35 +56,46 @@ st.markdown("""
 st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
-# --- INITIALISATION DE L'ÉTAT DU TUTORIEL ---
-if "tutoriel_ouvert" not in st.session_state:
-    st.session_state.tutoriel_ouvert = True
-
-@st.dialog("👋 Bienvenue sur ton Tuteur de révision !")
+# --- FENÊTRE D'ACCUEIL (POP-UP) AVEC EXPLICATION DES MODES ---
+@st.dialog("👋 Bienvenue sur ton Tuteur de Révision !")
 def afficher_tutoriel():
     st.markdown("""
         <style>
-        .big-font { font-size: 1.25rem !important; line-height: 1.7 !important; color: #2D3748; }
-        .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.35rem; display: block; margin-top: 18px; border-bottom: 1px solid #E2E8F0; }
+        .big-font { font-size: 1.2rem !important; line-height: 1.6 !important; color: #2D3748; }
+        .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.25rem; display: block; margin-top: 12px; }
+        .mode-box { 
+            background-color: #F0F4F8; 
+            padding: 15px; 
+            border-radius: 10px; 
+            margin: 10px 0;
+            border-left: 5px solid #5B9BD5;
+        }
         </style>
         <div class="big-font">
-        Ce tuteur intelligent utilise les <b>sciences cognitives</b> pour t'aider à réviser plus efficacement.<br><br>
-        ⚠️ <b>Attention :</b> Il n'est pas là pour te donner les réponses toutes faites, mais pour t'aider à réfléchir !<br><br>
+        Ce tuteur utilise les <b>sciences cognitives</b> pour t'aider à réviser efficacement.<br>
+        
+        <div class="mode-box">
+        <b>💡 Quel mode choisir ?</b><br>
+        • <b>Mémorisation :</b> Idéal pour retenir les définitions et les mots-clés.<br>
+        • <b>Compréhension :</b> Idéal pour apprendre à expliquer le cours et faire des liens.
+        </div>
+
         <b>Comment l'utiliser :</b><br>
         <span class="step-title">1. ⚙️ Règle ton tuteur</span>
-        Choisis ton mode (Mémoriser/Comprendre) et ton niveau dans la barre à gauche.<br>
+        Choisis ton mode et ton niveau dans la barre à gauche.<br>
+        
         <span class="step-title">2. 🧭 Donne-lui ton cours</span>
-        Charge ton PDF ou colle ton texte dans la zone prévue à gauche.<br>
+        Charge ton PDF ou colle ton texte à gauche.<br>
+        
         <span class="step-title">3. 💬 Discute</span>
-        Réponds aux questions du tuteur directement dans le chat en bas !
+        Réponds aux questions du tuteur dans le chat en bas !
         </div>
         <br>
     """, unsafe_allow_html=True)
     
     if st.button("🚀 J'ai compris, c'est parti !", use_container_width=True):
-        st.session_state.tutoriel_ouvert = False
+        st.session_state.tutoriel_vu = True
         st.rerun()
-
 # Affichage automatique au lancement
 if st.session_state.tutoriel_ouvert:
     afficher_tutoriel()
@@ -235,6 +246,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
