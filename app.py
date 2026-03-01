@@ -56,52 +56,38 @@ st.markdown("""
 st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
-# --- FENÊTRE D'ACCUEIL (POP-UP) OPTIMISÉE ---
-@st.dialog("👋 Bienvenue sur ton Tuteur de Révision !")
+# --- INITIALISATION DE L'ÉTAT DU TUTORIEL ---
+if "tutoriel_ouvert" not in st.session_state:
+    st.session_state.tutoriel_ouvert = True
+
+@st.dialog("👋 Bienvenue sur ton Tuteur de révision !")
 def afficher_tutoriel():
-    # Style CSS local pour agrandir le texte du dialogue
     st.markdown("""
         <style>
-        .big-font {
-            font-size: 1.2rem !important;
-            line-height: 1.6 !important;
-        }
-        .step-title {
-            font-weight: bold;
-            color: #5B9BD5;
-            font-size: 1.3rem;
-            display: block;
-            margin-top: 15px;
-        }
+        .big-font { font-size: 1.25rem !important; line-height: 1.7 !important; color: #2D3748; }
+        .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.35rem; display: block; margin-top: 18px; border-bottom: 1px solid #E2E8F0; }
         </style>
         <div class="big-font">
         Ce tuteur intelligent utilise les <b>sciences cognitives</b> pour t'aider à réviser plus efficacement.<br><br>
-        ⚠️ <b>Attention :</b> Il n'est pas là pour te donner les réponses toutes faites, mais pour t'aider à réfléchir et à construire ta propre compréhension !<br><br>
-        <b>Comment l'utiliser en 3 étapes simples :</b><br>
-        
-        <span class="step-title">1. ⚙️ Règle ton tuteur (à gauche)</span>
-        • Choisis ton mode : <b>Mémoriser</b> ou <b>Comprendre</b>.<br>
-        • Indique ton niveau pour que les questions soient adaptées.<br>
-        
+        ⚠️ <b>Attention :</b> Il n'est pas là pour te donner les réponses toutes faites, mais pour t'aider à réfléchir !<br><br>
+        <b>Comment l'utiliser :</b><br>
+        <span class="step-title">1. ⚙️ Règle ton tuteur</span>
+        Choisis ton mode (Mémoriser/Comprendre) et ton niveau dans la barre à gauche.<br>
         <span class="step-title">2. 🧭 Donne-lui ton cours</span>
-        • Charge le PDF de ton chapitre.<br>
-        • Ou colle ton texte directement dans la zone prévue.<br>
-        
+        Charge ton PDF ou colle ton texte dans la zone prévue à gauche.<br>
         <span class="step-title">3. 💬 Discute</span>
-        • Le tuteur va analyser ton document et te poser des questions.<br>
-        • Réponds-lui directement dans le chat en bas de l'écran !
+        Réponds aux questions du tuteur directement dans le chat en bas !
         </div>
         <br>
     """, unsafe_allow_html=True)
     
     if st.button("🚀 J'ai compris, c'est parti !", use_container_width=True):
-        st.session_state.tutoriel_vu = True
+        st.session_state.tutoriel_ouvert = False
         st.rerun()
 
-# Affichage du pop-up
-if "tutoriel_vu" not in st.session_state:
+# Affichage automatique au lancement
+if st.session_state.tutoriel_ouvert:
     afficher_tutoriel()
-
 # --- INITIALISATION DE L'API GEMINI ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -249,6 +235,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
