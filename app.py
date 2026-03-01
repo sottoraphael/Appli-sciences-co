@@ -4,6 +4,39 @@ import PyPDF2
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Tuteur Socratique", page_icon="🧠", layout="centered")
+# --- CUSTOM CSS (DESIGN CHALEUREUX) ---
+st.markdown("""
+    <style>
+    /* Fond de la page principale */
+    .stApp {
+        background-color: #FFFDF9;
+    }
+    
+    /* Couleur de la barre latérale */
+    [data-testid="stSidebar"] {
+        background-color: #F8F4EA;
+    }
+    
+    /* Style des boutons et éléments interactifs */
+    .stButton>button {
+        background-color: #5B9BD5;
+        color: white;
+        border-radius: 10px;
+        border: none;
+    }
+    
+    /* Titres plus doux */
+    h1, h2, h3 {
+        color: #4A4A4A;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+    
+    /* Bulles de chat (facultatif : pour arrondir davantage) */
+    [data-testid="stChatMessage"] {
+        border-radius: 15px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 st.title("🧠 Ton Tuteur de Révision Socratique")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
@@ -154,5 +187,6 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
