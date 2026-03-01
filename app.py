@@ -56,6 +56,29 @@ st.markdown("""
 st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
+# --- FENÊTRE D'ACCUEIL (POP-UP) ---
+@st.dialog("👋 Bienvenue sur ton Tuteur de Révision !")
+def afficher_tutoriel():
+    st.markdown("""
+    Ce tuteur intelligent utilise les **sciences cognitives** pour t'aider à réviser plus efficacement. 
+    
+    ⚠️ **Attention :** Il n'est pas là pour te donner les réponses toutes faites, mais pour t'aider à réfléchir et à construire ta propre compréhension !
+
+    **Comment l'utiliser en 3 étapes simples :**
+    
+    1. ⚙️ **Règle ton tuteur (à gauche) :** * Choisis si tu veux **Mémoriser** (retenir les bases) ou **Comprendre** (aller plus loin).
+       * Indique ton niveau pour qu'il adapte ses questions.
+    2. 🧭 **Donne-lui ton cours :** * Charge le PDF de ton chapitre ou colle directement ton texte dans la barre de gauche.
+    3. 💬 **Discute :** * Le tuteur va analyser ton document et te poser des questions. Réponds-lui naturellement dans le chat !
+    """)
+    if st.button("🚀 J'ai compris, c'est parti !"):
+        st.session_state.tutoriel_vu = True
+        st.rerun()
+
+# On affiche le pop-up uniquement si l'élève ne l'a pas encore vu
+if "tutoriel_vu" not in st.session_state:
+    afficher_tutoriel()
+
 # --- INITIALISATION DE L'API GEMINI ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -203,6 +226,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
