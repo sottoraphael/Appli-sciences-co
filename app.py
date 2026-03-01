@@ -77,7 +77,7 @@ def afficher_tutoriel():
         <div class="mode-box">
         <b>💡 Quel mode choisir ?</b><br><br>
         • <b>Mémorisation :</b> Pour retenir les définitions et les concepts "par cœur".<br><br>
-        • <b>Compréhension :</b> Pour comprendre ton cours en profondeur en expliquant le cours avec tes propres mots.
+        • <b>Compréhension :</b> Pour maîtriser ton cours en profondeur en l'expliquant avec tes propres mots.
         </div>
 
         <b>Comment l'utiliser en 3 étapes :</b><br>
@@ -248,6 +248,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": reponse.text})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
