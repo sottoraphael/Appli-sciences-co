@@ -228,16 +228,18 @@ if texte_cours:
             hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat.history = hist
             
-            # --- AFFICHAGE FLUIDE EN TEMPS RÉEL (STREAMING) ---
+    # --- AFFICHAGE FLUIDE NATIF STREAMLIT ---
             reponse = chat.send_message(prompt_enrichi, stream=True)
             
-            placeholder = st.empty()
-            texte_complet = ""
-            for chunk in reponse:
-                texte_complet += chunk.text
-                placeholder.markdown(texte_complet + "▌")
+            # On crée un petit "générateur" qui donne les mots un par un
+            def generer_flux():
+                for chunk in reponse:
+                    yield chunk.text
+                    
+            # Streamlit s'occupe de l'animation de manière ultra-fluide !
+            texte_complet = st.write_stream(generer_flux())
             
-            placeholder.markdown(texte_complet)
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
