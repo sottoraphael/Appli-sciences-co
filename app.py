@@ -31,7 +31,7 @@ st.markdown("""
     /* Bulles de chat */
     [data-testid="stChatMessage"] { border-radius: 15px; }
 
-    /* --- NOUVEAU : AGRANDIR LE TEXTE DANS LE CHAT --- */
+    /* --- TEXTE AGRANDI DANS LE CHAT --- */
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li {
         font-size: 1.15rem !important;
@@ -45,6 +45,13 @@ st.markdown("""
         opacity: 1 !important;
         filter: none !important;
         transition: none !important;
+    }
+    div[data-testid="stMainBlockContainer"] {
+        opacity: 1 !important;
+    }
+    /* Empêche la barre de saisie de devenir transparente */
+    [data-testid="stChatInput"] {
+        opacity: 1 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -254,7 +261,7 @@ if texte_cours:
                     mots = chunk.text.split(" ")
                     for mot in mots:
                         yield mot + " "
-                        time.sleep(0.03) # Micro-pause pour un effet fluide et naturel
+                        time.sleep(0.03) # Micro-pause de 30 millisecondes pour un effet fluide et naturel
                         
             # Streamlit affiche maintenant mot par mot à un rythme régulier
             texte_complet = st.write_stream(generer_flux_lisse())
