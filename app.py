@@ -17,10 +17,10 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #F0F4F8; border-right: 1px solid #E2E8F0; }
     
     /* Grossir les titres des options "Ton niveau" et "Ton objectif" */
-    .stRadio > label { font-size: 1.25rem !important; font-weight: 600 !important; color: #2D3748 !important; padding-bottom: 5px; }
+    .stRadio > label { font-size: 2rem !important; font-weight: 600 !important; color: #2D3748 !important; padding-bottom: 5px; }
     
     /* Grossir légèrement les choix (Novice, Avancé...) */
-    .stRadio p { font-size: 1.05rem !important; }
+    .stRadio p { font-size: 1.5rem !important; }
     
     /* Style des boutons et éléments interactifs */
     .stButton>button { background-color: #5B9BD5; color: white; border-radius: 10px; border: none; }
@@ -269,3 +269,4 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
