@@ -9,9 +9,12 @@ st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layou
 
 # --- CUSTOM CSS (DESIGN MODERNE ET LISIBLE) ---
 st.markdown("""
-    /* --- ANTI-LATENCE VISUELLE --- */
-    /* Empêche l'application de blanchir pendant qu'elle réfléchit */
-    [data-testid="stAppViewContainer"] * {
+    /* --- ANTI-LATENCE VISUELLE (MODE FORCE) --- */
+    div[data-testid="stChatMessage"], 
+    div[data-testid="stMarkdownContainer"], 
+    div[data-testid="stChatInput"] {
+        opacity: 1 !important;
+        filter: none !important;
         transition: none !important;
     }
     div[data-testid="stMainBlockContainer"] {
@@ -258,6 +261,7 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
 
 
