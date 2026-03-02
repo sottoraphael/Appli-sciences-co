@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 import PyPDF2
+import io
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layout="centered")
@@ -9,47 +10,25 @@ st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layou
 st.markdown("""
     <style>
     /* Fond de la page principale */
-    .stApp {
-        background-color: #FFFDF9;
-    }
+    .stApp { background-color: #FFFDF9; }
     
-    /* Couleur de la barre latérale - Moderne et élégant (Gris-Bleu très clair) */
-    [data-testid="stSidebar"] {
-        background-color: #F0F4F8; 
-        border-right: 1px solid #E2E8F0; /* Petite bordure propre */
-    }
+    /* Couleur de la barre latérale - Moderne et élégant */
+    [data-testid="stSidebar"] { background-color: #F0F4F8; border-right: 1px solid #E2E8F0; }
     
     /* Grossir les titres des options "Ton niveau" et "Ton objectif" */
-    .stRadio > label {
-        font-size: 1.25rem !important;
-        font-weight: 600 !important;
-        color: #2D3748 !important;
-        padding-bottom: 5px;
-    }
+    .stRadio > label { font-size: 1.25rem !important; font-weight: 600 !important; color: #2D3748 !important; padding-bottom: 5px; }
     
     /* Grossir légèrement les choix (Novice, Avancé...) */
-    .stRadio p {
-        font-size: 1.05rem !important;
-    }
+    .stRadio p { font-size: 1.05rem !important; }
     
     /* Style des boutons et éléments interactifs */
-    .stButton>button {
-        background-color: #5B9BD5;
-        color: white;
-        border-radius: 10px;
-        border: none;
-    }
+    .stButton>button { background-color: #5B9BD5; color: white; border-radius: 10px; border: none; }
     
     /* Titres plus doux */
-    h1, h2, h3 {
-        color: #2D3748;
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }
+    h1, h2, h3 { color: #2D3748; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
     
     /* Bulles de chat */
-    [data-testid="stChatMessage"] {
-        border-radius: 15px;
-    }
+    [data-testid="stChatMessage"] { border-radius: 15px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -108,13 +87,17 @@ else:
     st.error("⚠️ Clé API introuvable. Configurez 'GEMINI_API_KEY' dans les Secrets.")
     st.stop()
 
-# --- FONCTION POUR LIRE LES PDF ---
-def extraire_texte_pdf(fichier):
-    lecteur = PyPDF2.PdfReader(fichier)
-    texte = ""
-    for page in lecteur.pages:
-        texte += page.extract_text() + "\n"
-    return texte
+# --- EXTRACTION DU CONTENU (AVEC MISE EN CACHE) ---
+@st.cache_data
+def obtenir_texte_cours(fichier_bytes, type_fichier):
+    if type_fichier == "pdf":
+        lecteur = PyPDF2.PdfReader(io.BytesIO(fichier_bytes))
+        texte = ""
+        for page in lecteur.pages:
+            texte += page.extract_text() + "\n"
+        return texte
+    else:
+        return fichier_bytes.decode("utf-8")
 
 # --- BARRE LATÉRALE (RÉGLAGES) ---
 with st.sidebar:
@@ -127,13 +110,12 @@ with st.sidebar:
     fichier_upload = st.file_uploader("Cours (PDF/TXT)", type=["pdf", "txt"])
     texte_manuel = st.text_area("Ou colle ton texte ici :")
 
-# --- EXTRACTION DU CONTENU ---
+# --- LECTURE DU CONTENU ---
 texte_cours = ""
 if fichier_upload:
-    if fichier_upload.name.endswith('.pdf'):
-        texte_cours = extraire_texte_pdf(fichier_upload)
-    else:
-        texte_cours = fichier_upload.read().decode("utf-8")
+    bytes_data = fichier_upload.getvalue()
+    type_f = "pdf" if fichier_upload.name.endswith('.pdf') else "txt"
+    texte_cours = obtenir_texte_cours(bytes_data, type_f)
 elif texte_manuel:
     texte_cours = texte_manuel
 
@@ -163,11 +145,17 @@ if texte_cours:
         * Feedback : Explique toujours POURQUOI la réponse est juste ou fausse.
         """
         
-        # --- ÉCHAFAUDAGE SPÉCIFIQUE AU MODE A ---
         if niveau_eleve == "Novice":
             prompt_systeme += """
             # ÉCHAFAUDAGE (NOVICE)
             * Utilise exclusivement des questions à choix multiples (QCM) en appliquant strictement la stratégie des leurres ci-dessus pour faciliter la reconnaissance.
+            * FORMATAGE VISUEL STRICT : Tu DOIS impérativement aller à la ligne pour chaque proposition. Laisse une ligne vide entre chaque choix pour aérer la lecture.
+            Exemple de format exigé :
+            A) [Proposition 1]
+            
+            B) [Proposition 2]
+            
+            C) [Proposition 3]
             """
         else:
             prompt_systeme += """
@@ -188,7 +176,6 @@ if texte_cours:
            5. Contre-Exemple : Identifier les limites de la règle.
         """
 
-        # --- ÉCHAFAUDAGE SPÉCIFIQUE AU MODE B ---
         if niveau_eleve == "Novice":
             prompt_systeme += """
             # ÉCHAFAUDAGE (NOVICE)
@@ -218,16 +205,14 @@ if texte_cours:
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # BOUCLE UNIQUE D'AFFICHAGE (Fini les doublons !)
     for msg in st.session_state.messages:
-        # L'IA utilise le hibou, l'élève utilisera le sien plus tard (pour l'instant, c'est l'émoji par défaut)
         avatar_chat = "avatar_tuteur.png" if msg["role"] == "assistant" else "avatar_eleve.png"
         with st.chat_message(msg["role"], avatar=avatar_chat):
             st.markdown(msg["content"])
 
     # --- GESTION DU PREMIER MESSAGE ---
     if not st.session_state.messages:
-        with st.spinner("Analyse du cours..."):
+        with st.spinner("Analyse du cours en cours..."):
             res = chat.send_message("Présente-toi brièvement et pose la première question selon mes réglages.")
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.rerun()
@@ -243,22 +228,16 @@ if texte_cours:
             hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat.history = hist
             
-            reponse = chat.send_message(prompt_enrichi)
-            st.markdown(reponse.text)
-            st.session_state.messages.append({"role": "assistant", "content": reponse.text})
+            # --- AFFICHAGE FLUIDE EN TEMPS RÉEL (STREAMING) ---
+            reponse = chat.send_message(prompt_enrichi, stream=True)
+            
+            placeholder = st.empty()
+            texte_complet = ""
+            for chunk in reponse:
+                texte_complet += chunk.text
+                placeholder.markdown(texte_complet + "▌")
+            
+            placeholder.markdown(texte_complet)
+            st.session_state.messages.append({"role": "assistant", "content": texte_complet})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
