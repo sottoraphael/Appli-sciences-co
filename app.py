@@ -108,6 +108,8 @@ with st.sidebar:
         if st.button("🔄 Nouvelle session", use_container_width=True):
             st.session_state.messages = []
             st.session_state.carnet_ia = "On commence tout juste ! Réponds à quelques questions pour que je puisse faire un point sur tes acquis."
+            if "chat" in st.session_state:
+                del st.session_state.chat # Reset de la mémoire de l'IA pour la nouvelle session
             st.rerun()
 
     # --- NOUVEAU : BILAN D'ÉTAPE DIRECT ---
@@ -130,56 +132,55 @@ elif texte_manuel:
 
 # --- CONSTRUCTION DYNAMIQUE DU PROMPT ---
 if texte_cours:
-    prompt_systeme = f"""
-    # RÔLE & OBJECTIF
-    Tu es un tuteur expert en pédagogie. Ta mission est d'enseigner le cours suivant : {texte_cours}
-    
-    # 📋 PROFIL DE L'ÉLÈVE (BILAN ACTUEL)
-    Voici le bilan factuel de l'élève à cet instant : {st.session_state.carnet_ia}
-    Adapte ton aide en fonction de ce qu'il maîtrise déjà.
+    # 1. ON INITIALISE LE CHAT UNE SEULE FOIS DANS LA SESSION
+    if "chat" not in st.session_state:
+        prompt_systeme = f"""
+        # RÔLE & OBJECTIF
+        Tu es un tuteur expert en pédagogie. Ta mission est d'enseigner le cours suivant : {texte_cours}
 
-    # 🧠 POSTURE DU COACH (RÈGLES ABSOLUES)
-    1. Pose UNE SEULE question à la fois. Attends la réponse.
-    2. Ne donne JAMAIS la réponse finale ou un long cours théorique s'il se trompe.
-    3. RÈGLE ANTI-BAVARDAGE : Tes feedbacks doivent être ultra-concis (2 à 3 phrases MAXIMUM). Va droit au but.
-    """
-
-    if niveau_eleve == "Novice":
-        prompt_systeme += """
-        ## 🌳 ARBRE DE DÉCISION (PROFIL NOVICE)
-        * N'utilise JAMAIS le feedback d'autorégulation ("Comment t'y es-tu pris ?").
-        * Utilise le "Feedback de Processus" très directif et CONCIS :
-           - Valide ce qui est juste (s'il y en a).
-           - Pointe l'erreur factuellement SANS faire de cours magistral.
-           - Pose une seule question facile pour l'aider à corriger son erreur pas à pas.
-        """
-    else:
-        prompt_systeme += """
-        ## 🌳 ARBRE DE DÉCISION (PROFIL AVANCÉ)
-        * SI ERREUR DE MÉTHODE -> Feedback de Processus très concis (donne un indice stratégique).
-        * SI ÉTOURDERIE OU ERREUR BÊTE -> Feedback d'Autorégulation :
-           - Force-le à s'auto-évaluer (ex: "As-tu vérifié ton signe mathématique ?").
-           - Ne corrige pas à sa place, oblige-le à relire son propre raisonnement.
+        # 🧠 POSTURE DU COACH (RÈGLES ABSOLUES)
+        1. Pose UNE SEULE question à la fois. Attends la réponse.
+        2. Ne donne JAMAIS la réponse finale ou un long cours théorique s'il se trompe.
+        3. RÈGLE ANTI-BAVARDAGE : Tes feedbacks doivent être ultra-concis (2 à 3 phrases MAXIMUM). Va droit au but.
         """
 
-    prompt_systeme += """
-    ## 🛑 ANTI-PROMPTS :
-    - Pas de jugement sur la personne.
-    - Pas de "C'est faux" sans petite explication.
-    - Pas de longs paragraphes d'explication.
-    """
-
-    if "Mode A" in objectif_eleve:
-        prompt_systeme += "* MODE MÉMORISATION : Teste un seul savoir atomique à la fois. "
         if niveau_eleve == "Novice":
-            prompt_systeme += "Pose uniquement des QCM (A, B, C) avec des retours à la ligne."
+            prompt_systeme += """
+            ## 🌳 ARBRE DE DÉCISION (PROFIL NOVICE)
+            * N'utilise JAMAIS le feedback d'autorégulation ("Comment t'y es-tu pris ?").
+            * Utilise le "Feedback de Processus" très directif et CONCIS :
+               - Valide ce qui est juste (s'il y en a).
+               - Pointe l'erreur factuellement SANS faire de cours magistral.
+               - Pose une seule question facile pour l'aider à corriger son erreur pas à pas.
+            """
         else:
-            prompt_systeme += "Utilise le Rappel Libre pur (sans QCM)."
-    else:
-        prompt_systeme += "* MODE COMPRÉHENSION : Demande à l'élève d'expliquer, de comparer ou de transformer l'information. "
+            prompt_systeme += """
+            ## 🌳 ARBRE DE DÉCISION (PROFIL AVANCÉ)
+            * SI ERREUR DE MÉTHODE -> Feedback de Processus très concis (donne un indice stratégique).
+            * SI ÉTOURDERIE OU ERREUR BÊTE -> Feedback d'Autorégulation :
+               - Force-le à s'auto-évaluer (ex: "As-tu vérifié ton signe mathématique ?").
+               - Ne corrige pas à sa place, oblige-le à relire son propre raisonnement.
+            """
 
-    model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme)
-    chat = model.start_chat(history=[])
+        prompt_systeme += """
+        ## 🛑 ANTI-PROMPTS :
+        - Pas de jugement sur la personne.
+        - Pas de "C'est faux" sans petite explication.
+        - Pas de longs paragraphes d'explication.
+        """
+
+        if "Mode A" in objectif_eleve:
+            prompt_systeme += "* MODE MÉMORISATION : Teste un seul savoir atomique à la fois. "
+            if niveau_eleve == "Novice":
+                prompt_systeme += "Pose uniquement des QCM (A, B, C) avec des retours à la ligne."
+            else:
+                prompt_systeme += "Utilise le Rappel Libre pur (sans QCM)."
+        else:
+            prompt_systeme += "* MODE COMPRÉHENSION : Demande à l'élève d'expliquer, de comparer ou de transformer l'information. "
+
+        model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme)
+        # On sauvegarde la session de chat. Elle gardera son propre historique automatiquement !
+        st.session_state.chat = model.start_chat(history=[])
 
     # --- AFFICHAGE DE L'HISTORIQUE ---
     for msg in st.session_state.messages:
@@ -187,25 +188,21 @@ if texte_cours:
         with st.chat_message(msg["role"], avatar=avatar_chat):
             st.markdown(msg["content"])
 
+    # --- PREMIER MESSAGE ---
     if not st.session_state.messages:
         with st.spinner("Analyse du cours en cours..."):
-            res = chat.send_message("Présente-toi brièvement (1 phrase) et pose la première question.")
+            res = st.session_state.chat.send_message("Présente-toi brièvement (1 phrase) et pose la première question.")
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.rerun()
 
+    # --- GESTION DES MESSAGES UTILISATEUR ---
     if prompt := st.chat_input("Ta réponse..."):
         st.chat_message("user", avatar="avatar_eleve.png").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("assistant", avatar="avatar_tuteur.png"):
-            
-            # FENÊTRE GLISSANTE (Garde les 4 derniers messages)
-            memoire_courte = st.session_state.messages[:-1][-4:]
-            hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in memoire_courte]
-            chat.history = hist
-            
-            # STREAMING NATIF (Vitesse débridée !)
-            reponse = chat.send_message(prompt, stream=True)
+            # PLUS BESOIN de manipuler l'historique manuellement, st.session_state.chat s'en charge !
+            reponse = st.session_state.chat.send_message(prompt, stream=True)
             
             def generer_flux_rapide():
                 for chunk in reponse:
@@ -217,13 +214,11 @@ if texte_cours:
             # MISE À JOUR DU BILAN (Tous les 3 échanges)
             nb_echanges = len(st.session_state.messages) // 2
             if nb_echanges % 3 == 0 and nb_echanges > 0:
-                with st.spinner("Mise à jour de ton bilan..."):
-                    prompt_notes = f"Tu es le tuteur. Bilan précédent : '{st.session_state.carnet_ia}'. Derniers échanges : {st.session_state.messages[-4:]}. Mets à jour ce bilan en t'adressant DIRECTEMENT à l'élève avec 'Tu'. Sois très factuel, précis et encourageant (2 phrases maximum). Exemple : 'Tu maîtrises bien la notion X, mais fais attention à la méthode Y.'"
+                with st.spinner("Mise à jour du bilan..."):
+                    prompt_notes = f"Tu es le tuteur. Bilan précédent : '{st.session_state.carnet_ia}'. Derniers échanges : {st.session_state.messages[-4:]}. Mets à jour ce bilan en t'adressant DIRECTEMENT à l'élève avec 'Tu'. Sois très factuel, précis et encourageant (2 phrases maximum)."
                     nouveau_carnet = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt_notes)
                     st.session_state.carnet_ia = nouveau_carnet.text
-            
-            if len(st.session_state.messages) == 3 or (nb_echanges % 3 == 0):
-                st.rerun()
+                    st.rerun() # On fait le rerun uniquement quand le bilan est prêt
 
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
