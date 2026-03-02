@@ -17,10 +17,10 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #F0F4F8; border-right: 1px solid #E2E8F0; }
     
     /* Grossir les titres des options "Ton niveau" et "Ton objectif" */
-    .stRadio > label { font-size: 2rem !important; font-weight: 600 !important; color: #2D3748 !important; padding-bottom: 5px; }
+    .stRadio > label { font-size: 1.25rem !important; font-weight: 600 !important; color: #2D3748 !important; padding-bottom: 5px; }
     
     /* Grossir légèrement les choix (Novice, Avancé...) */
-    .stRadio p { font-size: 1.5rem !important; }
+    .stRadio p { font-size: 1.05rem !important; }
     
     /* Style des boutons et éléments interactifs */
     .stButton>button { background-color: #5B9BD5; color: white; border-radius: 10px; border: none; }
@@ -31,11 +31,11 @@ st.markdown("""
     /* Bulles de chat */
     [data-testid="stChatMessage"] { border-radius: 15px; }
 
-    /* --- TEXTE AGRANDI DANS LE CHAT --- */
+    /* --- NOUVEAU : AGRANDIR LE TEXTE DANS LE CHAT --- */
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li {
         font-size: 1.15rem !important;
-        line-height: 1.6 !important;
+        line-height: 2 !important;
     }
 
     /* --- ANTI-LATENCE VISUELLE (MODE FORCE) --- */
@@ -45,13 +45,6 @@ st.markdown("""
         opacity: 1 !important;
         filter: none !important;
         transition: none !important;
-    }
-    div[data-testid="stMainBlockContainer"] {
-        opacity: 1 !important;
-    }
-    /* Empêche la barre de saisie de devenir transparente */
-    [data-testid="stChatInput"] {
-        opacity: 1 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -261,7 +254,7 @@ if texte_cours:
                     mots = chunk.text.split(" ")
                     for mot in mots:
                         yield mot + " "
-                        time.sleep(0.03) # Micro-pause de 30 millisecondes pour un effet fluide et naturel
+                        time.sleep(0.03) # Micro-pause pour un effet fluide et naturel
                         
             # Streamlit affiche maintenant mot par mot à un rythme régulier
             texte_complet = st.write_stream(generer_flux_lisse())
@@ -269,4 +262,3 @@ if texte_cours:
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
-
