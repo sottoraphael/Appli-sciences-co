@@ -2,6 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import tempfile
 import os
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layout="centered")
@@ -89,8 +90,11 @@ def afficher_bilan():
     if "chat" in st.session_state:
         with st.spinner("L'IA analyse tes réponses et rédige ton bilan..."):
             prompt_bilan = "La session est terminée. Fais un bilan métacognitif factuel et encourageant de cette révision. Adresse-toi directement à l'élève avec 'Tu'. Synthétise ce qu'il a bien maîtrisé, et les points (méthode ou connaissances) qu'il doit encore consolider. Ne pose plus de question."
-            reponse = st.session_state.chat.send_message(prompt_bilan)
-            st.success(reponse.text)
+            try:
+                reponse = st.session_state.chat.send_message(prompt_bilan)
+                st.success(reponse.text)
+            except Exception as e:
+                st.error("Impossible de générer le bilan pour le moment.")
     else:
         st.warning("Aucune session en cours à analyser.")
 
@@ -228,6 +232,14 @@ prompt_systeme += """
 * PROPRETÉ : Ne laisse jamais de balises techniques type [cite] ou [source] dans le résultat final.
 """
 
+# --- PARAMÈTRES DE SÉCURITÉ DE L'IA (POUR ÉVITER LES CRASHS) ---
+safety_settings = {
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+}
+
 # --- LOGIQUE DE DÉMARRAGE ET GESTION FICHIER (API FILE) ---
 if (fichier_upload or texte_manuel) and "chat" not in st.session_state:
     
@@ -256,8 +268,12 @@ if (fichier_upload or texte_manuel) and "chat" not in st.session_state:
             {"role": "model", "parts": ["C'est bien noté. Je suis prêt."]}
         ]
 
-    # INITIALISATION DU CERVEAU DANS LA SESSION
-    model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme)
+    # INITIALISATION DU CERVEAU DANS LA SESSION AVEC LES SÉCURITÉS DÉSACTIVÉES
+    model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash", 
+        system_instruction=prompt_systeme,
+        safety_settings=safety_settings
+    )
     st.session_state.chat = model.start_chat(history=historique_initial)
 
     # PREMIÈRE QUESTION AUTOMATIQUE
@@ -279,13 +295,18 @@ if "chat" in st.session_state:
         st.chat_message("user", avatar="avatar_eleve.png").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # Appel direct à l'IA qui a déjà tout en mémoire !
+        # Appel direct à l'IA
         with st.chat_message("assistant", avatar="avatar_tuteur.png"):
             reponse = st.session_state.chat.send_message(prompt, stream=True)
             
             def generer_flux_rapide():
                 for chunk in reponse:
-                    yield chunk.text
+                    try:
+                        # Le try/except est le gilet de sauvetage contre les morceaux vides
+                        if chunk.text:
+                            yield chunk.text
+                    except ValueError:
+                        pass # On ignore silencieusement si Google envoie un bloc vide
                         
             texte_complet = st.write_stream(generer_flux_rapide())
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
