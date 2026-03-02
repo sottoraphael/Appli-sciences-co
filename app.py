@@ -7,6 +7,13 @@ import time
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layout="centered")
 
+# --- INITIALISATION DE L'HISTORIQUE (Placé en haut pour gérer le verrouillage) ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Variable qui vérifie si une discussion a déjà commencé
+session_en_cours = len(st.session_state.messages) > 0
+
 # --- CUSTOM CSS (DESIGN MODERNE ET LISIBLE) ---
 st.markdown("""
     <style>
@@ -31,11 +38,11 @@ st.markdown("""
     /* Bulles de chat */
     [data-testid="stChatMessage"] { border-radius: 15px; }
 
-    /* --- NOUVEAU : AGRANDIR LE TEXTE DANS LE CHAT --- */
+    /* --- TEXTE AGRANDI DANS LE CHAT --- */
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li {
         font-size: 1.15rem !important;
-        line-height: 2 !important;
+        line-height: 1.6 !important;
     }
 
     /* --- ANTI-LATENCE VISUELLE (MODE FORCE) --- */
@@ -45,6 +52,12 @@ st.markdown("""
         opacity: 1 !important;
         filter: none !important;
         transition: none !important;
+    }
+    div[data-testid="stMainBlockContainer"] {
+        opacity: 1 !important;
+    }
+    [data-testid="stChatInput"] {
+        opacity: 1 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -93,7 +106,6 @@ def afficher_tutoriel():
         st.session_state.tutoriel_vu = True
         st.rerun()
 
-# Affichage automatique : on vérifie si la variable existe ET si elle est à True
 if "tutoriel_vu" not in st.session_state:
     afficher_tutoriel()
     
@@ -119,9 +131,18 @@ def obtenir_texte_cours(fichier_bytes, type_fichier):
 # --- BARRE LATÉRALE (RÉGLAGES) ---
 with st.sidebar:
     st.header("⚙️ Paramètres")
-    niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"])
-    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"])
     
+    # Les boutons se grisent (disabled=True) si une session est en cours !
+    niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
+    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
+    
+    # Apparition du bouton Reset si la session est verrouillée
+    if session_en_cours:
+        st.info("🔒 Paramètres verrouillés pendant la révision.")
+        if st.button("🔄 Changer de mode (Nouvelle session)", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
+
     st.markdown("---")
     st.header("🧭 Ton Cours")
     fichier_upload = st.file_uploader("Cours (PDF/TXT)", type=["pdf", "txt"])
@@ -219,9 +240,6 @@ if texte_cours:
     chat = model.start_chat(history=[])
 
     # --- AFFICHAGE DE L'HISTORIQUE ---
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
     for msg in st.session_state.messages:
         avatar_chat = "avatar_tuteur.png" if msg["role"] == "assistant" else "avatar_eleve.png"
         with st.chat_message(msg["role"], avatar=avatar_chat):
@@ -239,26 +257,25 @@ if texte_cours:
         st.chat_message("user", avatar="avatar_eleve.png").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        prompt_enrichi = f"{prompt}\n\n[DIRECTIVE SYSTÈME STRICTE : L'élève est actuellement en {objectif_eleve} et niveau {niveau_eleve}. Tu DOIS impérativement changer ta façon de poser la prochaine question pour respecter la Constitution Pédagogique de ce mode, même si cela casse la dynamique de tes messages précédents.]"
-        
         with st.chat_message("assistant", avatar="avatar_tuteur.png"):
             hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat.history = hist
             
-            # --- AFFICHAGE FLUIDE OPTIMISÉ (LISSAGE) ---
-            reponse = chat.send_message(prompt_enrichi, stream=True)
+            # --- PLUS DE PROMPT ENRICHI : ON ENVOIE JUSTE LE TEXTE PUR ! ---
+            reponse = chat.send_message(prompt, stream=True)
             
             def generer_flux_lisse():
                 for chunk in reponse:
-                    # On sépare le bloc envoyé par Gemini en mots individuels
                     mots = chunk.text.split(" ")
                     for mot in mots:
                         yield mot + " "
-                        time.sleep(0.03) # Micro-pause pour un effet fluide et naturel
+                        time.sleep(0.03) 
                         
-            # Streamlit affiche maintenant mot par mot à un rythme régulier
             texte_complet = st.write_stream(generer_flux_lisse())
-            
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
+            
+            # On force un rechargement invisible pour griser les boutons de la barre latérale au 1er message
+            if len(st.session_state.messages) == 2:
+                st.rerun()
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
