@@ -2,6 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import PyPDF2
 import io
+import time
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layout="centered")
@@ -228,18 +229,22 @@ if texte_cours:
             hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat.history = hist
             
-    # --- AFFICHAGE FLUIDE NATIF STREAMLIT ---
+    # --- AFFICHAGE FLUIDE OPTIMISÉ (LISSAGE) ---
             reponse = chat.send_message(prompt_enrichi, stream=True)
             
-            # On crée un petit "générateur" qui donne les mots un par un
-            def generer_flux():
+            def generer_flux_lisse():
                 for chunk in reponse:
-                    yield chunk.text
-                    
-            # Streamlit s'occupe de l'animation de manière ultra-fluide !
-            texte_complet = st.write_stream(generer_flux())
+                    # On sépare le bloc envoyé par Gemini en mots individuels
+                    mots = chunk.text.split(" ")
+                    for mot in mots:
+                        yield mot + " "
+                        time.sleep(0.03) # Micro-pause de 30 millisecondes pour un effet fluide et naturel
+                        
+    # Streamlit affiche maintenant mot par mot à un rythme régulier
+            texte_complet = st.write_stream(generer_flux_lisse())
             
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
