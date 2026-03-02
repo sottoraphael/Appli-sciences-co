@@ -7,101 +7,66 @@ import time
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layout="centered")
 
-# --- INITIALISATION DE L'HISTORIQUE (Placé en haut pour gérer le verrouillage) ---
+# --- INITIALISATION DE L'HISTORIQUE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Variable qui vérifie si une discussion a déjà commencé
 session_en_cours = len(st.session_state.messages) > 0
 
-# --- CUSTOM CSS (DESIGN MODERNE ET LISIBLE) ---
+# --- CUSTOM CSS ---
 st.markdown("""
     <style>
-    /* Fond de la page principale */
     .stApp { background-color: #FFFDF9; }
-    
-    /* Couleur de la barre latérale - Moderne et élégant */
     [data-testid="stSidebar"] { background-color: #F0F4F8; border-right: 1px solid #E2E8F0; }
-    
-    /* Grossir les titres des options "Ton niveau" et "Ton objectif" */
     .stRadio > label { font-size: 1.25rem !important; font-weight: 600 !important; color: #2D3748 !important; padding-bottom: 5px; }
-    
-    /* Grossir légèrement les choix (Novice, Avancé...) */
     .stRadio p { font-size: 1.05rem !important; }
-    
-    /* Style des boutons et éléments interactifs */
     .stButton>button { background-color: #5B9BD5; color: white; border-radius: 10px; border: none; }
-    
-    /* Titres plus doux */
     h1, h2, h3 { color: #2D3748; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-    
-    /* Bulles de chat */
     [data-testid="stChatMessage"] { border-radius: 15px; }
-
-    /* --- TEXTE AGRANDI DANS LE CHAT --- */
+    
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li {
         font-size: 1.15rem !important;
         line-height: 1.6 !important;
     }
 
-    /* --- ANTI-LATENCE VISUELLE (MODE FORCE) --- */
     div[data-testid="stChatMessage"], 
     div[data-testid="stMarkdownContainer"], 
-    div[data-testid="stChatInput"] {
-        opacity: 1 !important;
-        filter: none !important;
-        transition: none !important;
-    }
-    div[data-testid="stMainBlockContainer"] {
-        opacity: 1 !important;
-    }
-    [data-testid="stChatInput"] {
-        opacity: 1 !important;
-    }
+    div[data-testid="stChatInput"] { opacity: 1 !important; filter: none !important; transition: none !important; }
+    div[data-testid="stMainBlockContainer"] { opacity: 1 !important; }
+    [data-testid="stChatInput"] { opacity: 1 !important; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
-# --- GESTION DU TUTORIEL D'ACCUEIL ---
+# --- TUTORIEL ---
 @st.dialog("👋 Bienvenue sur ton tuteur de révision")
 def afficher_tutoriel():
     st.markdown("""
         <style>
         .big-font { font-size: 1.25rem !important; line-height: 1.7 !important; color: #2D3748; }
         .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.35rem; display: block; margin-top: 15px; }
-        .mode-box { 
-            background-color: #F0F4F8; 
-            padding: 15px; 
-            border-radius: 12px; 
-            margin: 15px 0;
-            border-left: 6px solid #5B9BD5;
-        }
+        .mode-box { background-color: #F0F4F8; padding: 15px; border-radius: 12px; margin: 15px 0; border-left: 6px solid #5B9BD5; }
         </style>
         <div class="big-font">
         Ce tuteur utilise les <b>sciences cognitives</b> pour t'aider à réviser sans stress.<br>
-        
         <div class="mode-box">
         <b>💡 Quel mode choisir ?</b><br><br>
         • <b>Mémorisation :</b> Pour retenir les définitions et les concepts "par cœur".<br><br>
         • <b>Compréhension :</b> Pour maîtriser ton cours en profondeur en l'expliquant avec tes propres mots.
         </div>
-
         <b>Comment l'utiliser en 3 étapes :</b><br>
         <span class="step-title">1. ⚙️ Règle ton tuteur</span>
-        Choisis ton mode et ton niveau dans la barre à gauche (tu peux changer à tout moment de la discussion).<br>
-        
+        Choisis ton mode et ton niveau dans la barre à gauche.<br>
         <span class="step-title">2. 🧭 Donne-lui ton cours</span>
-        Charge ton PDF ou colle ton texte dans la barre à gauche.<br>
-        
+        Charge ton PDF ou colle ton texte.<br>
         <span class="step-title">3. 💬 Discute</span>
-        Réponds aux questions directement dans le chat en bas !
+        Réponds aux questions dans le chat !
         </div>
         <br>
     """, unsafe_allow_html=True)
-    
     if st.button("🚀 J'ai compris, c'est parti !", use_container_width=True):
         st.session_state.tutoriel_vu = True
         st.rerun()
@@ -109,14 +74,12 @@ def afficher_tutoriel():
 if "tutoriel_vu" not in st.session_state:
     afficher_tutoriel()
     
-# --- INITIALISATION DE L'API GEMINI ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
     st.error("⚠️ Clé API introuvable. Configurez 'GEMINI_API_KEY' dans les Secrets.")
     st.stop()
 
-# --- EXTRACTION DU CONTENU (AVEC MISE EN CACHE) ---
 @st.cache_data
 def obtenir_texte_cours(fichier_bytes, type_fichier):
     if type_fichier == "pdf":
@@ -128,15 +91,12 @@ def obtenir_texte_cours(fichier_bytes, type_fichier):
     else:
         return fichier_bytes.decode("utf-8")
 
-# --- BARRE LATÉRALE (RÉGLAGES) ---
+# --- BARRE LATÉRALE ---
 with st.sidebar:
     st.header("⚙️ Paramètres")
-    
-    # Les boutons se grisent (disabled=True) si une session est en cours !
     niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
     objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
     
-    # Apparition du bouton Reset si la session est verrouillée
     if session_en_cours:
         st.info("🔒 Paramètres verrouillés pendant la révision.")
         if st.button("🔄 Changer de mode (Nouvelle session)", use_container_width=True):
@@ -148,7 +108,6 @@ with st.sidebar:
     fichier_upload = st.file_uploader("Cours (PDF/TXT)", type=["pdf", "txt"])
     texte_manuel = st.text_area("Ou colle ton texte ici :")
 
-# --- LECTURE DU CONTENU ---
 texte_cours = ""
 if fichier_upload:
     bytes_data = fichier_upload.getvalue()
@@ -157,102 +116,82 @@ if fichier_upload:
 elif texte_manuel:
     texte_cours = texte_manuel
 
-# --- CONSTRUCTION DYNAMIQUE DU PROMPT ---
+# --- CONSTRUCTION DYNAMIQUE DU PROMPT (AVEC LE NOUVEAU MOTEUR DE FEEDBACK) ---
 if texte_cours:
     prompt_systeme = f"""
     # RÔLE & OBJECTIF
     Tu es un expert en ingénierie pédagogique cognitive et un spécialiste technique EdTech.
-    Ta mission est de transformer des contenus bruts en activités d'apprentissage en appliquant strictement les principes scientifiques ci-dessous.
+    Ta mission est de transformer des contenus bruts en activités d'apprentissage.
     Base-toi exclusivement sur ce texte pour le fond : {texte_cours}
-    # FORMAT ATTENDU : MODE INTERACTIF
-    Pose une question à la fois. Attends la réponse. Analyse l'erreur. Donne le feedback.
-    Ne donne jamais la solution directement avant que l'élève n'ait essayé. Guide-le.
+    
+    # 🧠 POSTURE ET GESTION DU FEEDBACK (COACH COGNITIF)
+    Ton objectif absolu est de réduire la distance entre la compréhension actuelle de l'élève et la compréhension visée. Pose UNE SEULE question à la fois. Attends la réponse.
+    RÈGLE D'OR : Tu ne dois JAMAIS donner la réponse finale directement. Fournis une information qui permet à l'élève de corriger sa propre trajectoire.
+
+    ## ARBRE DE DÉCISION DU FEEDBACK (À appliquer à chaque réponse de l'élève) :
+    1. SI ERREUR DE MÉTHODE OU BLOCAGE -> Active le "Feedback de Processus" :
+       - Indices de correction : Pointe l'endroit de l'erreur ou suggère une piste sans donner la solution (ex: "As-tu pensé à utiliser tous les éléments ?").
+       - Sollicite l'amélioration : Ne clos pas l'échange (ex: "Deux éléments sur trois sont corrects. Cherche le troisième.").
+       - Attributions causales : Relie la réussite ou l'échec aux stratégies (ex: "Tu as réussi car tu es bien passé par les différentes étapes" ou "C'est faux car il te manque cette étape").
+
+    2. SI ÉTOURDERIE, BONNE MÉTHODE MAIS ERREUR, OU DOUTE -> Active le "Feedback d'Autorégulation" :
+       - Contrôle interne : Demande à l'élève de s'auto-évaluer (ex: "À ton avis, ta réponse est-elle correcte ? Vérifie-la.").
+       - Monitoring : Questionne le suivi de la tâche (ex: "Comment t'y es-tu pris pour trouver ce résultat ?").
+       - Dédramatisation : Présente toujours les erreurs comme des étapes normales et indispensables de l'apprentissage.
+
+    ## 🛑 LES ANTI-PROMPTS (INTERDICTIONS STRICTES) :
+    - INTERDICTION de juger la personne (Le "Soi") : Ne dis JAMAIS "Tu es nul", "Tu es brillant" ou "Tu es doué". Reste sur la tâche.
+    - INTERDICTION du feedback stéréotypé isolé : Ne dis JAMAIS juste "C'est faux" ou "C'est juste" sans fournir d'explication sur le processus.
+    - INTERDICTION de comparaison sociale : Ne compare JAMAIS l'élève aux autres ou à une moyenne.
+    - INTERDICTION des félicitations imméritées ou génériques : Évite les "Bravo !" vagues. Explique toujours précisément POURQUOI c'est bien, car un succès immérité accroît l'incertitude.
     """
 
+    # La suite reste identique pour les Niveaux et les Modes (Constitution Pédagogique)
     if "Mode A" in objectif_eleve:
         prompt_systeme += """
-        # LA "CONSTITUTION" PÉDAGOGIQUE
-        ## MODE A : ANCRAGE & MÉMORISATION (Testing Effect)
-        * Principe : Se tester (récupération active) consolide la mémoire.
+        # CONSTITUTION PÉDAGOGIQUE - MODE A : MÉMORISATION (Testing Effect)
         * Règle de l'Information Minimale : Une question = Un seul savoir atomique.
-        * STRATÉGIE DES LEURRES (Distracteurs) : Ne jamais générer de remplissage aléatoire. Utilise exclusivement ces 3 stratégies pour créer les mauvaises réponses :
-           1. La Confusion de Concepts : Utilise un terme proche (champ lexical identique) mais de définition différente.
-           2. L'Erreur de "Bon Sens" : La réponse intuitive mais fausse (celle que donnerait un novice complet).
-           3. L'Inversion de Causalité : Inverse la cause et l'effet ou l'ordre des étapes.
-        * RÈGLE D'HOMOGÉNÉITÉ : Les leurres doivent avoir la même longueur, la même structure grammaticale et le même niveau de langage que la bonne réponse.
-        * Feedback : Explique toujours POURQUOI la réponse est juste ou fausse.
+        * STRATÉGIE DES LEURRES : Utilise exclusivement ces 3 stratégies pour les mauvaises réponses : Confusion de Concepts, Erreur de "Bon Sens", Inversion de Causalité.
+        * RÈGLE D'HOMOGÉNÉITÉ : Les leurres doivent avoir la même longueur et structure grammaticale que la bonne réponse.
         """
-        
         if niveau_eleve == "Novice":
             prompt_systeme += """
-            # ÉCHAFAUDAGE (NOVICE)
-            * Utilise exclusivement des questions à choix multiples (QCM) en appliquant strictement la stratégie des leurres ci-dessus pour faciliter la reconnaissance.
-            * FORMATAGE VISUEL STRICT : Tu DOIS impérativement aller à la ligne pour chaque proposition. Laisse une ligne vide entre chaque choix pour aérer la lecture.
-            Exemple de format exigé :
-            A) [Proposition 1]
-            
-            B) [Proposition 2]
-            
-            C) [Proposition 3]
+            * ÉCHAFAUDAGE (NOVICE) : Utilise exclusivement des QCM. 
+            * FORMATAGE VISUEL STRICT : Va à la ligne pour chaque proposition. Laisse une ligne vide entre chaque choix. (A) ... B) ... C) ...).
             """
         else:
-            prompt_systeme += """
-            # ÉCHAFAUDAGE (AVANCÉ)
-            * Utilise exclusivement le "Rappel Libre". Pose une question directe et précise sans proposer AUCUN choix, indice ou leurre. L'élève doit formuler la réponse seul.
-            """
+            prompt_systeme += "* ÉCHAFAUDAGE (AVANCÉ) : Utilise exclusivement le Rappel Libre sans aucun choix."
 
     else:
         prompt_systeme += """
-        # LA "CONSTITUTION" PÉDAGOGIQUE
-        ## MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
-        * Principe : L'élève doit construire du sens (Processus SOI : Sélectionner, Organiser, Intégrer).
-        * MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente) :
-           1. Transformation : Convertir un texte en schéma ou processus.
-           2. Comparaison Structurée : Tableau (Ressemblances/Différences/Limites).
-           3. Auto-explication : Verbaliser le pourquoi d'une étape.
-           4. Cartographie : Hiérarchiser les concepts.
-           5. Contre-Exemple : Identifier les limites de la règle.
+        # CONSTITUTION PÉDAGOGIQUE - MODE B : COMPRÉHENSION (Apprentissage Génératif)
+        * MENU GÉNÉRATIF : Choisis parmi Transformation, Comparaison Structurée, Auto-explication, Cartographie, ou Contre-Exemple.
         """
-
         if niveau_eleve == "Novice":
-            prompt_systeme += """
-            # ÉCHAFAUDAGE (NOVICE)
-            * Utilise le "Completion Problem Effect" (Schémas à compléter, Textes à trous, Tableaux partiels fournis par tes soins pour réduire la charge cognitive).
-            """
+            prompt_systeme += "* ÉCHAFAUDAGE (NOVICE) : Utilise le Completion Problem Effect (Schémas à compléter, Textes à trous...)."
         else:
-            prompt_systeme += """
-            # ÉCHAFAUDAGE (AVANCÉ)
-            * Utilise des prompts ouverts ("Analysez...", "Critiquez...", "Crée un tableau comparatif complet"). Ne donne aucune structure de départ, laisse l'élève l'organiser.
-            """
+            prompt_systeme += "* ÉCHAFAUDAGE (AVANCÉ) : Prompts ouverts purs. Ne donne aucune structure de départ."
 
     prompt_systeme += """
-    # GARDE-FOUS
-    * Base-toi exclusivement sur le texte fourni pour le fond.
-    * Applique la Constitution Pédagogique pour la forme.
-    * PROPRETÉ : Ne laisse jamais de balises techniques type [cite] ou [source] dans le résultat final.
+    # GARDE-FOUS FINAUX
+    * Base-toi exclusivement sur le texte.
+    * Ne laisse jamais de balises techniques type [cite] dans le résultat.
     """
 
-    # --- GESTION DU MODELE ---
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash", 
-        system_instruction=prompt_systeme
-    )
+    model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme)
     chat = model.start_chat(history=[])
 
-    # --- AFFICHAGE DE L'HISTORIQUE ---
     for msg in st.session_state.messages:
         avatar_chat = "avatar_tuteur.png" if msg["role"] == "assistant" else "avatar_eleve.png"
         with st.chat_message(msg["role"], avatar=avatar_chat):
             st.markdown(msg["content"])
 
-    # --- GESTION DU PREMIER MESSAGE ---
     if not st.session_state.messages:
         with st.spinner("Analyse du cours en cours..."):
             res = chat.send_message("Présente-toi brièvement et pose la première question selon mes réglages.")
             st.session_state.messages.append({"role": "assistant", "content": res.text})
             st.rerun()
 
-    # --- SAISIE ET ENVOI DE LA RÉPONSE DE L'ÉLÈVE ---
     if prompt := st.chat_input("Ta réponse..."):
         st.chat_message("user", avatar="avatar_eleve.png").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -261,7 +200,6 @@ if texte_cours:
             hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat.history = hist
             
-            # --- PLUS DE PROMPT ENRICHI : ON ENVOIE JUSTE LE TEXTE PUR ! ---
             reponse = chat.send_message(prompt, stream=True)
             
             def generer_flux_lisse():
@@ -274,7 +212,6 @@ if texte_cours:
             texte_complet = st.write_stream(generer_flux_lisse())
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
             
-            # On force un rechargement invisible pour griser les boutons de la barre latérale au 1er message
             if len(st.session_state.messages) == 2:
                 st.rerun()
 else:
