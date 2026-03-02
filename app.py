@@ -9,21 +9,6 @@ st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layou
 
 # --- CUSTOM CSS (DESIGN MODERNE ET LISIBLE) ---
 st.markdown("""
-    /* --- ANTI-LATENCE VISUELLE (MODE FORCE) --- */
-    div[data-testid="stChatMessage"], 
-    div[data-testid="stMarkdownContainer"], 
-    div[data-testid="stChatInput"] {
-        opacity: 1 !important;
-        filter: none !important;
-        transition: none !important;
-    }
-    div[data-testid="stMainBlockContainer"] {
-        opacity: 1 !important;
-    }
-    /* Empêche la barre de saisie de devenir transparente */
-    [data-testid="stChatInput"] {
-        opacity: 1 !important;
-    }
     <style>
     /* Fond de la page principale */
     .stApp { background-color: #FFFDF9; }
@@ -45,6 +30,22 @@ st.markdown("""
     
     /* Bulles de chat */
     [data-testid="stChatMessage"] { border-radius: 15px; }
+
+    /* --- NOUVEAU : AGRANDIR LE TEXTE DANS LE CHAT --- */
+    [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li {
+        font-size: 1.15rem !important;
+        line-height: 1.6 !important;
+    }
+
+    /* --- ANTI-LATENCE VISUELLE (MODE FORCE) --- */
+    div[data-testid="stChatMessage"], 
+    div[data-testid="stMarkdownContainer"], 
+    div[data-testid="stChatInput"] {
+        opacity: 1 !important;
+        filter: none !important;
+        transition: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -244,7 +245,7 @@ if texte_cours:
             hist = [{"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat.history = hist
             
-    # --- AFFICHAGE FLUIDE OPTIMISÉ (LISSAGE) ---
+            # --- AFFICHAGE FLUIDE OPTIMISÉ (LISSAGE) ---
             reponse = chat.send_message(prompt_enrichi, stream=True)
             
             def generer_flux_lisse():
@@ -253,15 +254,11 @@ if texte_cours:
                     mots = chunk.text.split(" ")
                     for mot in mots:
                         yield mot + " "
-                        time.sleep(0.03) # Micro-pause de 30 millisecondes pour un effet fluide et naturel
+                        time.sleep(0.03) # Micro-pause pour un effet fluide et naturel
                         
-    # Streamlit affiche maintenant mot par mot à un rythme régulier
+            # Streamlit affiche maintenant mot par mot à un rythme régulier
             texte_complet = st.write_stream(generer_flux_lisse())
             
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
 else:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
-
-
-
-
