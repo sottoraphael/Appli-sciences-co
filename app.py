@@ -254,48 +254,45 @@ for msg in st.session_state.messages:
 
 # --- GESTION DU DIALOGUE AVEC L'IA ---
 if "chat" in st.session_state:
-    
-    # 1. Capture de l'input et affichage instantané
     if prompt := st.chat_input("Ta réponse..."):
-        # On sauvegarde le message de l'élève
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        # On crée un "drapeau" pour dire à l'app de générer la réponse IA
-        st.session_state.attente_reponse_ia = True
-        # On force le rafraîchissement : le message de l'élève s'affiche instantanément sans lag
-        st.rerun()
         
-    # 2. Déclenchement de l'IA dans un cycle séparé
-    if st.session_state.get("attente_reponse_ia"):
+        # 1. On affiche INSTANTANÉMENT le message de l'élève
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user", avatar="avatar_eleve.png"):
+            st.markdown(prompt)
+            
+        # 2. On ouvre la bulle du tuteur immédiatement pour montrer qu'il a "entendu"
         with st.chat_message("assistant", avatar="avatar_tuteur.png"):
             
-            # La purge de l'historique (ton secret de constance !)
-            if len(st.session_state.chat.history) > 6:
-                del st.session_state.chat.history[2:-4]
+            # Message d'attente visuel clair
+            status_text = st.markdown("⏳ *Le tuteur analyse ta réponse...*")
             
-            # Le spinner s'affiche maintenant de manière fluide
-            with st.spinner("Réflexion pédagogique en cours..."):
-                # On récupère le dernier message de l'élève
-                dernier_prompt = st.session_state.messages[-1]["content"]
+            # 3. LE SECRET DE LA LATENCE CONSTANTE (Sliding Window)
+            # L'historique doit toujours commencer par [0] User(Fichier+Prompt), [1] Model(Ok)
+            # Ensuite, on ne garde que les 2 derniers échanges (soit 4 messages : User/Model/User/Model)
+            # Total max autorisé : 6. Si on dépasse, on coupe les plus anciens.
+            while len(st.session_state.chat.history) > 6:
+                # On supprime systématiquement la paire de messages la plus ancienne après l'intro
+                del st.session_state.chat.history[2:4] 
                 
-                # L'appel API (qui prend du temps) se fait ici
-                reponse = st.session_state.chat.send_message(dernier_prompt, stream=True)
-                
-                def generer_flux_rapide():
-                    for chunk in reponse:
-                        try:
-                            if chunk.text: yield chunk.text
-                        except ValueError:
-                            pass
-                            
-                texte_complet = st.write_stream(generer_flux_rapide())
-                
-            # Sauvegarde de la réponse de l'IA
-            st.session_state.messages.append({"role": "assistant", "content": texte_complet})
-            # On désactive le drapeau
-            st.session_state.attente_reponse_ia = False
+            # 4. On lance l'appel API en streaming
+            reponse = st.session_state.chat.send_message(prompt, stream=True)
             
-            # Rerun final pour clean l'état (et figer la sidebar si c'était le 1er message)
-            st.rerun()
+            def stream_data():
+                for chunk in reponse:
+                    if chunk.text:
+                        yield chunk.text
+            
+            # 5. Dès que le flux est prêt, on efface le message d'attente "⏳"
+            status_text.empty()
+            
+            # 6. Et on affiche la vraie réponse de manière fluide
+            texte_complet = st.write_stream(stream_data())
+            
+        # On sauvegarde la réponse finale de l'IA dans l'historique de l'interface
+        st.session_state.messages.append({"role": "assistant", "content": texte_complet})
+
 elif not fichier_upload and not texte_manuel:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
 
