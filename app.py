@@ -254,23 +254,31 @@ for msg in st.session_state.messages:
 
 # --- GESTION DU DIALOGUE AVEC L'IA ---
 if "chat" in st.session_state:
+    
+    # 1. Capture de l'input et affichage instantané
     if prompt := st.chat_input("Ta réponse..."):
-        st.chat_message("user", avatar="avatar_eleve.png").markdown(prompt)
+        # On sauvegarde le message de l'élève
         st.session_state.messages.append({"role": "user", "content": prompt})
+        # On crée un "drapeau" pour dire à l'app de générer la réponse IA
+        st.session_state.attente_reponse_ia = True
+        # On force le rafraîchissement : le message de l'élève s'affiche instantanément sans lag
+        st.rerun()
         
+    # 2. Déclenchement de l'IA dans un cycle séparé
+    if st.session_state.get("attente_reponse_ia"):
         with st.chat_message("assistant", avatar="avatar_tuteur.png"):
             
-            # --- LE SECRET DE LA CONSTANCE : LA PURGE DE L'HISTORIQUE ---
-            # On empêche l'historique de grossir. On garde l'introduction (2 index) et les 4 derniers messages.
-            # Cela bloque le temps de réflexion de l'IA à 5 secondes pour toujours.
+            # La purge de l'historique (ton secret de constance !)
             if len(st.session_state.chat.history) > 6:
                 del st.session_state.chat.history[2:-4]
             
-            # --- L'ANIMATION DU SABLIER (SPINNER) ---
-            # J'utilise le spinner Streamlit par défaut qui est animé par un cercle qui tourne.
-            # Cela donne le feedback visuel que l'IA réfléchit pendant les 5s de blanc.
+            # Le spinner s'affiche maintenant de manière fluide
             with st.spinner("Réflexion pédagogique en cours..."):
-                reponse = st.session_state.chat.send_message(prompt, stream=True)
+                # On récupère le dernier message de l'élève
+                dernier_prompt = st.session_state.messages[-1]["content"]
+                
+                # L'appel API (qui prend du temps) se fait ici
+                reponse = st.session_state.chat.send_message(dernier_prompt, stream=True)
                 
                 def generer_flux_rapide():
                     for chunk in reponse:
@@ -280,10 +288,14 @@ if "chat" in st.session_state:
                             pass
                             
                 texte_complet = st.write_stream(generer_flux_rapide())
+                
+            # Sauvegarde de la réponse de l'IA
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
+            # On désactive le drapeau
+            st.session_state.attente_reponse_ia = False
             
-            # Rechargement pour figer les boutons lors du premier message de l'élève
-            if len(st.session_state.messages) == 3:
-                st.rerun()
+            # Rerun final pour clean l'état (et figer la sidebar si c'était le 1er message)
+            st.rerun()
 elif not fichier_upload and not texte_manuel:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+
