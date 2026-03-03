@@ -14,7 +14,7 @@ if "messages" not in st.session_state:
 # La session est en cours si le tuteur a posé sa première question
 session_en_cours = len(st.session_state.messages) > 0
 
-# --- CUSTOM CSS (ANTI-BLANCHISSEMENT EXTRÊME) ---
+# --- CUSTOM CSS (ANTI-BLANCHISSEMENT) ---
 st.markdown("""
     <style>
     .stApp { background-color: #FFFDF9; }
@@ -29,8 +29,7 @@ st.markdown("""
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li { font-size: 1.15rem !important; line-height: 1.6 !important; }
     
-    /* --- LE SECRET ANTI-BLANCHISSEMENT --- */
-    /* Interdit à Streamlit de griser l'écran pendant le chargement */
+    /* INTERDICTION DE GRISER L'ÉCRAN */
     *[data-stale="true"], *[data-stale="false"] {
         opacity: 1 !important;
         filter: none !important;
@@ -78,54 +77,12 @@ if "tutoriel_vu" not in st.session_state:
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("⚠️ Clé API introuvable. Configurez 'GEMINI_API_KEY' dans les Secrets.")
+    st.error("⚠️ Clé API introuvable.")
     st.stop()
 
-# --- DIALOGUE BILAN FINAL ---
-@st.dialog("📈 Ton Bilan de Révision")
-def afficher_bilan():
-    if "chat" in st.session_state:
-        with st.spinner("Analyse métacognitive en cours (relecture de tous tes échanges)..."):
-            prompt_bilan = "La session est terminée. Fais un bilan métacognitif factuel et encourageant de cette révision. Adresse-toi directement à l'élève avec 'Tu'. Synthétise ce qu'il a bien maîtrisé, et les points (méthode ou connaissances) qu'il doit encore consolider. Ne pose plus de question."
-            try:
-                reponse = st.session_state.chat.send_message(prompt_bilan)
-                st.success(reponse.text)
-            except Exception:
-                st.error("Impossible de générer le bilan pour le moment.")
-    else:
-        st.warning("Aucune session en cours à analyser.")
-
-# --- BARRE LATÉRALE ---
-with st.sidebar:
-    st.header("⚙️ Paramètres")
-    niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
-    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
-    
-    if session_en_cours:
-        st.info("🔒 Paramètres verrouillés pendant la révision.")
-        if st.button("🏁 Terminer et voir mon bilan", use_container_width=True, type="primary"):
-            afficher_bilan()
-            
-        st.markdown("---")
-        if st.button("🔄 Changer de mode (Nouvelle session)", use_container_width=True):
-            if "file_id" in st.session_state:
-                try:
-                    genai.delete_file(st.session_state.file_id)
-                except Exception:
-                    pass
-                del st.session_state.file_id
-            if "chat" in st.session_state:
-                del st.session_state.chat
-            st.session_state.messages = []
-            st.rerun()
-
-    st.markdown("---")
-    st.header("🧭 Ton Cours")
-    fichier_upload = st.file_uploader("Cours (PDF uniquement)", type=["pdf"])
-    texte_manuel = st.text_area("Ou colle ton texte ici :")
-
-# --- CONSTITUTION PÉDAGOGIQUE INTÉGRALE (INTOUCHÉE) ---
-prompt_systeme = """
+# --- CONSTITUTION PÉDAGOGIQUE INTÉGRALE ---
+def generer_prompt_systeme(niveau, objectif):
+    prompt = """
 # RÔLE & OBJECTIF
 Tu es un expert en ingénierie pédagogique cognitive et un spécialiste technique EdTech.
 Ta mission est de transformer des contenus bruts en activités d'apprentissage en appliquant strictement les principes scientifiques ci-dessous.
@@ -156,75 +113,70 @@ Lorsque tu dois faire un "Feedback d'Autorégulation" (pour les élèves avancé
 - INTERDICTION des félicitations imméritées ou génériques : Évite les "Bravo !" vagues. Explique toujours précisément POURQUOI c'est bien.
 """
 
-# ARBRE DE DÉCISION CSEN (NIVEAUX)
-if niveau_eleve == "Novice":
-    prompt_systeme += """
-    ## 🌳 ARBRE DE DÉCISION DU FEEDBACK (PROFIL NOVICE)
-    L'élève est NOVICE, bloqué ou potentiellement incertain. Il construit sa compétence.
-    * INTERDICTION ABSOLUE : N'utilise JAMAIS le feedback d'autorégulation. Ne lui demande pas de s'auto-évaluer.
-    * RÈGLE ACTIVE : Utilise EXCLUSIVEMENT le "Feedback de Processus" en respectant strictement sa structure en 3 étapes (Constat + Diagnostic + Levier de guidage) pour le rassurer et le guider pas-à-pas.
-    """
-else:
-    prompt_systeme += """
-    ## 🌳 ARBRE DE DÉCISION DU FEEDBACK (PROFIL AVANCÉ)
-    L'élève est AVANCÉ. Il a déjà les bases et une confiance élevée, mais peut faire des étourderies.
-    * SI ERREUR DE MÉTHODE -> Active le "Feedback de Processus" avec sa structure stricte (Constat + Diagnostic + Levier de guidage).
-    * SI ÉTOURDERIE OU ERREUR ALORS QU'IL SEMBLE SÛR DE LUI -> Active le "Feedback d'Autorégulation" avec sa structure stricte (Miroir + Radar + Stratégie) pour créer un choc cognitif.
-    """
-
-# LA CONSTITUTION PÉDAGOGIQUE INTÉGRALE (MODES)
-if "Mode A" in objectif_eleve:
-    prompt_systeme += """
-    # LA "CONSTITUTION" PÉDAGOGIQUE - MODE A : ANCRAGE & MÉMORISATION (Testing Effect)
-    * Principe : Se tester (récupération active) consolide la mémoire.
-    * Règle de l'Information Minimale : Une question = Un seul savoir atomique.
-    * STRATÉGIE DES LEURRES (Distracteurs) : Ne jamais générer de remplissage aléatoire. Utilise exclusivement ces 3 stratégies pour créer les mauvaises réponses :
-       1. La Confusion de Concepts : Utilise un terme proche (champ lexical identique) mais de définition différente.
-       2. L'Erreur de "Bon Sens" : La réponse intuitive mais fausse (celle que donnerait un novice complet).
-       3. L'Inversion de Causalité : Inverse la cause et l'effet ou l'ordre des étapes.
-    * RÈGLE D'HOMOGÉNÉITÉ : Les leurres doivent avoir la même longueur, la même structure grammaticale et le même niveau de langage que la bonne réponse.
-    * Feedback : Explique toujours POURQUOI la réponse est juste ou fausse, en respectant la structure exigée si l'élève s'est trompé.
-    """
-    if niveau_eleve == "Novice":
-        prompt_systeme += """
-        * ÉCHAFAUDAGE (NOVICE) : Utilise exclusivement des questions à choix multiples (QCM) en appliquant strictement la stratégie des leurres ci-dessus.
-        * FORMATAGE VISUEL STRICT : Tu DOIS impérativement aller à la ligne pour chaque proposition. Laisse une ligne vide entre chaque choix pour aérer la lecture.
-        Exemple de format exigé :
-        A) [Proposition 1]
-        
-        B) [Proposition 2]
-        
-        C) [Proposition 3]
-        """
-    else:
-        prompt_systeme += """
-        * ÉCHAFAUDAGE (AVANCÉ) : Utilise exclusivement le "Rappel Libre". Pose une question directe et précise sans proposer AUCUN choix, indice ou leurre. L'élève doit formuler la réponse seul.
-        """
-else:
-    prompt_systeme += """
-    # LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
-    * Principe : L'élève doit construire du sens (Processus SOI : Sélectionner, Organiser, Intégrer).
-    * MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente) :
-       1. Transformation : Convertir un texte en schéma ou processus.
-       2. Comparaison Structurée : Tableau (Ressemblances/Différences/Limites).
-       3. Auto-explication : Verbaliser le pourquoi d'une étape.
-       4. Cartographie : Hiérarchiser les concepts.
-       5. Contre-Exemple : Identifier les limites de la règle.
-    """
-    if niveau_eleve == "Novice":
-        prompt_systeme += """
-        * ÉCHAFAUDAGE (NOVICE) : Utilise le "Completion Problem Effect" (Schémas à compléter, Textes à trous, Tableaux partiels fournis par tes soins pour réduire la charge cognitive).
-        """
-    else:
-        prompt_systeme += """
-        * ÉCHAFAUDAGE (AVANCÉ) : Utilise des prompts ouverts ("Analysez...", "Critiquez...", "Crée un tableau comparatif complet"). Ne donne aucune structure de départ, laisse l'élève l'organiser.
-        """
-
-prompt_systeme += """
-# GARDE-FOUS FINAUX
-* Base-toi exclusivement sur le texte fourni pour le fond.
-* PROPRETÉ : Ne laisse jamais de balises techniques type [cite] ou [source] dans le résultat final.
+    if niveau == "Novice":
+        prompt += """
+## 🌳 ARBRE DE DÉCISION DU FEEDBACK (PROFIL NOVICE)
+L'élève est NOVICE, bloqué ou potentiellement incertain. Il construit sa compétence.
+* INTERDICTION ABSOLUE : N'utilise JAMAIS le feedback d'autorégulation. Ne lui demande pas de s'auto-évaluer.
+* RÈGLE ACTIVE : Utilise EXCLUSIVEMENT le "Feedback de Processus" en respectant strictement sa structure en 3 étapes (Constat + Diagnostic + Levier de guidage) pour le rassurer et le guider pas-à-pas.
 """
+    else:
+        prompt += """
+## 🌳 ARBRE DE DÉCISION DU FEEDBACK (PROFIL AVANCÉ)
+L'élève est AVANCÉ. Il a déjà les bases et une confiance élevée, mais peut faire des étourderies.
+* SI ERREUR DE MÉTHODE -> Active le "Feedback de Processus" avec sa structure stricte (Constat + Diagnostic + Levier de guidage).
+* SI ÉTOURDERIE OU ERREUR ALORS QU'IL SEMBLE SÛR DE LUI -> Active le "Feedback d'Autorégulation" avec sa structure stricte (Miroir + Radar + Stratégie) pour créer un choc cognitif.
+"""
+
+    if "Mode A" in objectif:
+        prompt += """
+# LA "CONSTITUTION" PÉDAGOGIQUE - MODE A : ANCRAGE & MÉMORISATION (Testing Effect)
+* Principe : Se tester (récupération active) consolide la mémoire.
+* Règle de l'Information Minimale : Une question = Un seul savoir atomique.
+* STRATÉGIE DES LEURRES (Distracteurs) : Ne jamais générer de remplissage aléatoire. Utilise exclusivement ces 3 stratégies pour créer les mauvaises réponses :
+   1. La Confusion de Concepts : Utilise un terme proche (champ lexical identique) mais de définition différente.
+   2. L'Erreur de "Bon Sens" : La réponse intuitive mais fausse (celle que donnerait un novice complet).
+   3. L'Inversion de Causalité : Inverse la cause et l'effet ou l'ordre des étapes.
+* RÈGLE D'HOMOGÉNÉITÉ : Les leurres doivent avoir la même longueur, la même structure grammaticale et le même niveau de langage que la bonne réponse.
+* Feedback : Explique toujours POURQUOI la réponse est juste ou fausse, en respectant la structure exigée si l'élève s'est trompé.
+"""
+        if niveau == "Novice":
+            prompt += """
+* ÉCHAFAUDAGE (NOVICE) : Utilise exclusivement des questions à choix multiples (QCM) en appliquant strictement la stratégie des leurres ci-dessus.
+* FORMATAGE VISUEL STRICT : Tu DOIS impérativement aller à la ligne pour chaque proposition. Laisse une ligne vide entre chaque choix pour aérer la lecture.
+Exemple de format exigé :
+A) [Proposition 1]
+
+B) [Proposition 2]
+
+C) [Proposition 3]
+"""
+        else:
+            prompt += """
+* ÉCHAFAUDAGE (AVANCÉ) : Utilise exclusivement le "Rappel Libre". Pose une question directe et précise sans proposer AUCUN choix, indice ou leurre. L'élève doit formuler la réponse seul.
+"""
+    else:
+        prompt += """
+# LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
+* Principe : L'élève doit construire du sens (Processus SOI : Sélectionner, Organiser, Intégrer).
+* MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente) :
+   1. Transformation : Convertir un texte en schéma ou processus.
+   2. Comparaison Structurée : Tableau (Ressemblances/Différences/Limites).
+   3. Auto-explication : Verbaliser le pourquoi d'une étape.
+   4. Cartographie : Hiérarchiser les concepts.
+   5. Contre-Exemple : Identifier les limites de la règle.
+"""
+        if niveau == "Novice":
+            prompt += """
+* ÉCHAFAUDAGE (NOVICE) : Utilise le "Completion Problem Effect" (Schémas à compléter, Textes à trous, Tableaux partiels fournis par tes soins pour réduire la charge cognitive).
+"""
+        else:
+            prompt += """
+* ÉCHAFAUDAGE (AVANCÉ) : Utilise des prompts ouverts ("Analysez...", "Critiquez...", "Crée un tableau comparatif complet"). Ne donne aucune structure de départ, laisse l'élève l'organiser.
+"""
+
+    prompt += "\n# GARDE-FOUS FINAUX\n* Base-toi exclusivement sur le texte fourni pour le fond.\n* PROPRETÉ : Ne laisse jamais de balises techniques type [cite] ou [source] dans le résultat final."
+    return prompt
 
 safety_settings = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
@@ -233,10 +185,71 @@ safety_settings = {
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
 }
 
-# --- INITIALISATION DU CHAT ET DU FICHIER ---
-if (fichier_upload or texte_manuel) and "chat" not in st.session_state:
-    historique_initial = []
+# --- DIALOGUE BILAN FINAL ---
+@st.dialog("📈 Ton Bilan de Révision")
+def afficher_bilan():
+    if len(st.session_state.messages) > 1:
+        with st.spinner("Analyse métacognitive en cours (relecture de tous tes échanges)..."):
+            # On reconstruit l'historique complet exceptionnellement pour le bilan
+            historique_complet = []
+            if "file_id" in st.session_state:
+                f_obj = genai.get_file(st.session_state.file_id)
+                historique_complet.extend([{"role": "user", "parts": [f_obj, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
+            elif "texte_manuel" in st.session_state:
+                historique_complet.extend([{"role": "user", "parts": [f"Voici mon texte :\n{st.session_state.texte_manuel}"]}, {"role": "model", "parts": ["Compris."]}])
+            
+            for msg in st.session_state.messages:
+                role = "user" if msg["role"] == "user" else "model"
+                historique_complet.append({"role": role, "parts": [msg["content"]]})
+                
+            model_bilan = genai.GenerativeModel("gemini-2.5-flash", system_instruction="Tu es un coach. Fais un bilan métacognitif factuel et encourageant de cette session. Adresse-toi à l'élève avec 'Tu'. Synthétise les acquis et les points à consolider. Ne pose plus de question.")
+            chat_bilan = model_bilan.start_chat(history=historique_complet)
+            
+            try:
+                reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan.")
+                st.success(reponse.text)
+            except Exception:
+                st.error("Impossible de générer le bilan pour le moment.")
+    else:
+        st.warning("Aucune session en cours à analyser.")
+
+# --- BARRE LATÉRALE ---
+with st.sidebar:
+    st.header("⚙️ Paramètres")
+    niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
+    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
     
+    if session_en_cours:
+        st.info("🔒 Paramètres verrouillés pendant la révision.")
+        if st.button("🏁 Terminer et voir mon bilan", use_container_width=True, type="primary"):
+            afficher_bilan()
+            
+        st.markdown("---")
+        if st.button("🔄 Changer de mode (Nouvelle session)", use_container_width=True):
+            if "file_id" in st.session_state:
+                try:
+                    genai.delete_file(st.session_state.file_id)
+                except Exception:
+                    pass
+                del st.session_state.file_id
+            if "texte_manuel" in st.session_state:
+                del st.session_state.texte_manuel
+            st.session_state.messages = []
+            st.rerun()
+
+    st.markdown("---")
+    st.header("🧭 Ton Cours")
+    fichier_upload = st.file_uploader("Cours (PDF uniquement)", type=["pdf"], disabled=session_en_cours)
+    texte_manuel = st.text_area("Ou colle ton texte ici :", disabled=session_en_cours)
+
+# Sauvegarde du texte collé en session pour ne pas le perdre
+if texte_manuel and not session_en_cours:
+    st.session_state.texte_manuel = texte_manuel
+
+prompt_systeme = generer_prompt_systeme(niveau_eleve, objectif_eleve)
+
+# --- INITIALISATION AU PREMIER MESSAGE ---
+if (fichier_upload or texte_manuel) and not st.session_state.messages:
     if fichier_upload and "file_id" not in st.session_state:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             tmp.write(fichier_upload.getvalue())
@@ -245,18 +258,19 @@ if (fichier_upload or texte_manuel) and "chat" not in st.session_state:
             fichier_ia = genai.upload_file(tmp_path)
             st.session_state.file_id = fichier_ia.name
         os.remove(tmp_path)
-        
+
+    historique_init = []
+    if "file_id" in st.session_state:
         f_obj = genai.get_file(st.session_state.file_id)
-        historique_initial = [{"role": "user", "parts": [f_obj, "Voici mon document de cours. Base-toi exclusivement dessus."]}, {"role": "model", "parts": ["C'est bien noté. Je suis prêt."]}]
-        
-    elif texte_manuel:
-        historique_initial = [{"role": "user", "parts": [f"Voici mon texte de cours :\n{texte_manuel}\n\nBase-toi exclusivement dessus."]}, {"role": "model", "parts": ["C'est bien noté. Je suis prêt."]}]
+        historique_init.extend([{"role": "user", "parts": [f_obj, "Voici mon document de cours. Base-toi exclusivement dessus."]}, {"role": "model", "parts": ["C'est bien noté. Je suis prêt."]}])
+    elif "texte_manuel" in st.session_state:
+        historique_init.extend([{"role": "user", "parts": [f"Voici mon texte de cours :\n{st.session_state.texte_manuel}\n\nBase-toi exclusivement dessus."]}, {"role": "model", "parts": ["C'est bien noté. Je suis prêt."]}])
 
     model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
-    st.session_state.chat = model.start_chat(history=historique_initial)
+    chat = model.start_chat(history=historique_init)
 
     with st.spinner("Analyse du cours en cours..."):
-        res = st.session_state.chat.send_message("Présente-toi brièvement et pose la première question selon mes réglages.")
+        res = chat.send_message("Présente-toi brièvement et pose la première question selon mes réglages.")
         st.session_state.messages.append({"role": "assistant", "content": res.text})
         st.rerun()
 
@@ -267,35 +281,52 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 # --- GESTION DU DIALOGUE AVEC L'IA ---
-if "chat" in st.session_state:
+if session_en_cours:
     if prompt := st.chat_input("Ta réponse..."):
         st.chat_message("user", avatar="avatar_eleve.png").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("assistant", avatar="avatar_tuteur.png"):
             
-            # --- PURGE DE L'HISTORIQUE (La vitesse constante) ---
-            if len(st.session_state.chat.history) > 6:
-                del st.session_state.chat.history[2:-4]
+            # --- LE VRAI BLOCAGE DE L'HISTORIQUE (La Vitesse Garantie) ---
+            # On recrée manuellement l'historique : le PDF + uniquement les 4 derniers messages.
+            # Ainsi Google ne saura jamais si on est à la question 2 ou 100 !
+            historique_dynamique = []
+            if "file_id" in st.session_state:
+                f_obj = genai.get_file(st.session_state.file_id)
+                historique_dynamique.extend([{"role": "user", "parts": [f_obj, "Voici mon document de cours. Base-toi exclusivement dessus."]}, {"role": "model", "parts": ["C'est bien noté. Je suis prêt."]}])
+            elif "texte_manuel" in st.session_state:
+                historique_dynamique.extend([{"role": "user", "parts": [f"Voici mon texte de cours :\n{st.session_state.texte_manuel}\n\nBase-toi exclusivement dessus."]}, {"role": "model", "parts": ["C'est bien noté. Je suis prêt."]}])
             
-            # --- LE SECRET DE L'AFFICHAGE DU SABLIER ---
-            # On place l'appel API qui prend 5 secondes *à l'intérieur* du générateur.
-            # Ainsi Streamlit dessine l'écran complet et lance le sablier avant de bloquer.
+            memoire_courte = st.session_state.messages[:-1][-4:]
+            for msg in memoire_courte:
+                role = "user" if msg["role"] == "user" else "model"
+                historique_dynamique.append({"role": role, "parts": [msg["content"]]})
+                
+            model_rapide = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
+            chat_rapide = model_rapide.start_chat(history=historique_dynamique)
+            
+            # --- LE SABLIER SYNCHRONISÉ ---
+            with st.spinner("⏳ Le tuteur analyse ta réponse..."):
+                reponse = chat_rapide.send_message(prompt, stream=True)
+                iterator = iter(reponse)
+                try:
+                    # On force le code à attendre le 1er bloc de texte *Pendant* que le sablier tourne
+                    first_chunk = next(iterator)
+                except StopIteration:
+                    first_chunk = None
+                    
             def generer_flux_rapide():
-                reponse = st.session_state.chat.send_message(prompt, stream=True)
-                for chunk in reponse:
+                if first_chunk and first_chunk.text:
+                    yield first_chunk.text
+                for chunk in iterator:
                     try:
                         if chunk.text: yield chunk.text
                     except ValueError:
                         pass
-            
-            # Ce bloc va tourner visuellement pendant que l'IA réfléchit
-            with st.spinner("⏳ Le tuteur analyse ta réponse..."):
-                texte_complet = st.write_stream(generer_flux_rapide())
-                
+                        
+            texte_complet = st.write_stream(generer_flux_rapide())
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
             
             if len(st.session_state.messages) == 3:
                 st.rerun()
-elif not fichier_upload and not texte_manuel:
-    st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
