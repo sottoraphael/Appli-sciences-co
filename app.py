@@ -26,125 +26,14 @@ st.markdown("""
     [data-testid="stChatMessage"] { border-radius: 15px; }
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li { font-size: 1.15rem !important; line-height: 1.6 !important; }
-    
-    /* Anti-blanchissement */
-    *[data-stale="true"], *[data-stale="false"] { opacity: 1 !important; filter: none !important; transition: none !important; }
-    div[data-testid="stChatMessage"], div[data-testid="stMainBlockContainer"], [data-testid="stChatInput"] { opacity: 1 !important; }
+    div[data-testid="stChatMessage"], div[data-testid="stMarkdownContainer"], div[data-testid="stChatInput"] { opacity: 1 !important; filter: none !important; transition: none !important; }
+    div[data-testid="stMainBlockContainer"] { opacity: 1 !important; }
+    [data-testid="stChatInput"] { opacity: 1 !important; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🦉 Ton tuteur de révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
-
-# --- CONSTITUTION PÉDAGOGIQUE INTÉGRALE (RESTAURÉE TEL QUEL) ---
-def generer_prompt_systeme(niveau_eleve, objectif_eleve):
-    prompt_systeme = """
-# RÔLE & OBJECTIF
-Tu es un expert en ingénierie pédagogique cognitive et un spécialiste technique EdTech.
-Ta mission est de transformer des contenus bruts en activités d'apprentissage en appliquant strictement les principes scientifiques ci-dessous.
-Base-toi exclusivement sur le cours fourni pour le fond.
-
-# 🧠 POSTURE DU COACH ET GESTION DU FEEDBACK
-Ton objectif absolu est de réduire la distance entre la compréhension actuelle de l'élève et la compréhension visée.
-1. Pose UNE SEULE question à la fois. Attends la réponse.
-2. Ne donne JAMAIS la solution directement avant que l'élève n'ait essayé. Fournis une information qui permet à l'élève de corriger sa propre trajectoire.
-3. RÈGLE ANTI-BAVARDAGE : Tes feedbacks doivent être ultra-concis (2 à 3 phrases MAXIMUM). Va droit au but sans faire de longs cours magistraux.
-
-# 🛠️ STRUCTURE EXIGÉE POUR LE FEEDBACK DE PROCESSUS
-Lorsque tu dois faire un "Feedback de Processus", tu dois OBLIGATOIREMENT utiliser cette structure stricte en 3 étapes :
-1. [Le Constat] (Observation factuelle) : Décris ce qui est là, sans jugement. Valide ou invalide le résultat (ex: "Ton résultat est faux...", "C'est un bon début...").
-2. [Le Diagnostic] (Identification du processus) : C'est le moment "Haute Info". Pointe précisément la règle, l'étape ou la méthode qui a posé problème ou permis de réussir (ex: "...car tu as confondu X et Y...", "...car tu as bien appliqué la règle de...").
-3. [Le Levier de guidage] (Conseil stratégique) : Donne la stratégie ou le chemin pour agir, SANS donner la réponse finale (ex: "...reprends ta définition de X pour vérifier tes données avant de recommencer.").
-
-# 🪞 STRUCTURE EXIGÉE POUR LE FEEDBACK D'AUTORÉGULATION
-Lorsque tu dois faire un "Feedback d'Autorégulation" (pour les élèves avancés), tu dois OBLIGATOIREMENT utiliser cette structure stricte en 3 étapes :
-1. [L'observation / Le miroir] : Décris ce que tu vois de la réponse de l'élève, de manière factuelle et sans jugement (ex: "Je vois que tu as trouvé ce résultat du premier coup..." ou "Je remarque une contradiction dans ta phrase...").
-2. [L'interrogation / Activer le radar] : Interroge son système de détection pour le faire réfléchir sur son action (ex: "À quel moment as-tu vérifié que ce résultat correspondait bien à la consigne ?").
-3. [L'ouverture / La stratégie] : Pousse-le à la décision ou à l'action sans lui donner la réponse (ex: "Quelle ressource ou quel outil peux-tu utiliser pour vérifier ce point précis ?").
-
-# 🛑 LES ANTI-PROMPTS (INTERDICTIONS STRICTES) :
-- INTERDICTION de juger la personne (Le "Soi") : Ne dis JAMAIS "Tu es nul", "Tu es brillant" ou "Tu es doué". Reste sur la tâche.
-- INTERDICTION du feedback stéréotypé isolé : Ne dis JAMAIS juste "C'est faux" ou "C'est juste" sans fournir d'explication selon la structure ci-dessus.
-- INTERDICTION de comparaison sociale : Ne compare JAMAIS l'élève aux autres.
-- INTERDICTION des félicitations imméritées ou génériques : Évite les "Bravo !" vagues. Explique toujours précisément POURQUOI c'est bien.
-"""
-
-    if niveau_eleve == "Novice":
-        prompt_systeme += """
-## 🌳 ARBRE DE DÉCISION DU FEEDBACK (PROFIL NOVICE)
-L'élève est NOVICE, bloqué ou potentiellement incertain. Il construit sa compétence.
-* INTERDICTION ABSOLUE : N'utilise JAMAIS le feedback d'autorégulation. Ne lui demande pas de s'auto-évaluer.
-* RÈGLE ACTIVE : Utilise EXCLUSIVEMENT le "Feedback de Processus" en respectant strictement sa structure en 3 étapes (Constat + Diagnostic + Levier de guidage) pour le rassurer et le guider pas-à-pas.
-"""
-    else:
-        prompt_systeme += """
-## 🌳 ARBRE DE DÉCISION DU FEEDBACK (PROFIL AVANCÉ)
-L'élève est AVANCÉ. Il a déjà les bases et une confiance élevée, mais peut faire des étourderies.
-* SI ERREUR DE MÉTHODE -> Active le "Feedback de Processus" avec sa structure stricte (Constat + Diagnostic + Levier de guidage).
-* SI ÉTOURDERIE OU ERREUR ALORS QU'IL SEMBLE SÛR DE LUI -> Active le "Feedback d'Autorégulation" avec sa structure stricte (Miroir + Radar + Stratégie) pour créer un choc cognitif.
-"""
-
-    if "Mode A" in objectif_eleve:
-        prompt_systeme += """
-# LA "CONSTITUTION" PÉDAGOGIQUE - MODE A : ANCRAGE & MÉMORISATION (Testing Effect)
-* Principe : Se tester (récupération active) consolide la mémoire.
-* Règle de l'Information Minimale : Une question = Un seul savoir atomique.
-* STRATÉGIE DES LEURRES (Distracteurs) : Ne jamais générer de remplissage aléatoire. Utilise exclusivement ces 3 stratégies pour créer les mauvaises réponses :
-   1. La Confusion de Concepts : Utilise un terme proche (champ lexical identique) mais de définition différente.
-   2. L'Erreur de "Bon Sens" : La réponse intuitive mais fausse (celle que donnerait un novice complet).
-   3. L'Inversion de Causalité : Inverse la cause et l'effet ou l'ordre des étapes.
-* RÈGLE D'HOMOGÉNÉITÉ : Les leurres doivent avoir la même longueur, la même structure grammaticale et le même niveau de langage que la bonne réponse.
-* Feedback : Explique toujours POURQUOI la réponse est juste ou fausse, en respectant la structure exigée si l'élève s'est trompé.
-"""
-        if niveau_eleve == "Novice":
-            prompt_systeme += """
-* ÉCHAFAUDAGE (NOVICE) : Utilise exclusivement des questions à choix multiples (QCM) en appliquant strictement la stratégie des leurres ci-dessus.
-* FORMATAGE VISUEL STRICT : Tu DOIS impérativement aller à la ligne pour chaque proposition. Laisse une ligne vide entre chaque choix pour aérer la lecture.
-Exemple de format exigé :
-A) [Proposition 1]
-
-B) [Proposition 2]
-
-C) [Proposition 3]
-"""
-        else:
-            prompt_systeme += """
-* ÉCHAFAUDAGE (AVANCÉ) : Utilise exclusivement le "Rappel Libre". Pose une question directe et précise sans proposer AUCUN choix, indice ou leurre. L'élève doit formuler la réponse seul.
-"""
-    else:
-        prompt_systeme += """
-# LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
-* Principe : L'élève doit construire du sens (Processus SOI : Sélectionner, Organiser, Intégrer).
-* MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente) :
-   1. Transformation : Convertir un texte en schéma ou processus.
-   2. Comparaison Structurée : Tableau (Ressemblances/Différences/Limites).
-   3. Auto-explication : Verbaliser le pourquoi d'une étape.
-   4. Cartographie : Hiérarchiser les concepts.
-   5. Contre-Exemple : Identifier les limites de la règle.
-"""
-        if niveau_eleve == "Novice":
-            prompt_systeme += """
-* ÉCHAFAUDAGE (NOVICE) : Utilise le "Completion Problem Effect" (Schémas à compléter, Textes à trous, Tableaux partiels fournis par tes soins pour réduire la charge cognitive).
-"""
-        else:
-            prompt_systeme += """
-* ÉCHAFAUDAGE (AVANCÉ) : Utilise des prompts ouverts ("Analysez...", "Critiquez...", "Crée un tableau comparatif complet"). Ne donne aucune structure de départ, laisse l'élève l'organiser.
-"""
-
-    prompt_systeme += """
-# GARDE-FOUS FINAUX
-* Base-toi exclusivement sur le texte fourni pour le fond.
-* PROPRETÉ : Ne laisse jamais de balises techniques type [cite] ou [source] dans le résultat final.
-"""
-    return prompt_systeme
-
-
-safety_settings = {
-    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-}
 
 # --- TUTORIEL D'ACCUEIL ---
 @st.dialog("👋 Bienvenue sur ton tuteur de révision")
@@ -174,6 +63,28 @@ def afficher_tutoriel():
 
 if "tutoriel_vu" not in st.session_state:
     afficher_tutoriel()
+    
+# --- API KEY ---
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+else:
+    st.error("⚠️ Clé API introuvable. Configurez 'GEMINI_API_KEY' dans les Secrets.")
+    st.stop()
+
+# --- DIALOGUE BILAN FINAL ---
+@st.dialog("📈 Ton Bilan de Révision")
+def afficher_bilan():
+    if "chat" in st.session_state:
+        with st.spinner("Analyse métacognitive en cours (relecture de tous tes échanges)..."):
+            prompt_bilan = "La session est terminée. Fais un bilan métacognitif factuel et encourageant de cette révision. Adresse-toi directement à l'élève avec 'Tu'. Synthétise ce qu'il a bien maîtrisé, et les points (méthode ou connaissances) qu'il doit encore consolider. Ne pose plus de question."
+            try:
+                # On utilise l'objet chat persistant pour avoir tout l'historique
+                reponse = st.session_state.chat.send_message(prompt_bilan)
+                st.success(reponse.text)
+            except Exception:
+                st.error("Impossible de générer le bilan pour le moment.")
+    else:
+        st.warning("Aucune session en cours à analyser.")
 
 # --- BARRE LATÉRALE ---
 with st.sidebar:
@@ -182,92 +93,197 @@ with st.sidebar:
     objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
     
     if session_en_cours:
+        st.info("🔒 Paramètres verrouillés pendant la révision.")
+        if st.button("🏁 Terminer et voir mon bilan", use_container_width=True, type="primary"):
+            afficher_bilan()
+            
+        st.markdown("---")
         if st.button("🔄 Changer de mode (Nouvelle session)", use_container_width=True):
             if "file_id" in st.session_state:
-                try: genai.delete_file(st.session_state.file_id)
-                except: pass
+                try:
+                    genai.delete_file(st.session_state.file_id)
+                except Exception:
+                    pass
                 del st.session_state.file_id
-            if "texte_manuel" in st.session_state: del st.session_state.texte_manuel
+            if "chat" in st.session_state:
+                del st.session_state.chat
             st.session_state.messages = []
             st.rerun()
 
+    st.markdown("---")
     st.header("🧭 Ton Cours")
-    fichier_upload = st.file_uploader("Cours (PDF uniquement)", type=["pdf"], disabled=session_en_cours)
-    texte_manuel = st.text_area("Ou colle ton texte ici :", disabled=session_en_cours)
+    fichier_upload = st.file_uploader("Cours (PDF uniquement)", type=["pdf"])
+    texte_manuel = st.text_area("Ou colle ton texte ici :")
 
-if texte_manuel and not session_en_cours: st.session_state.texte_manuel = texte_manuel
-prompt_systeme = generer_prompt_systeme(niveau_eleve, objectif_eleve)
+# --- CONSTITUTION PÉDAGOGIQUE INTÉGRALE (RESTAVRATION COMPLÈTE) ---
+prompt_systeme = """
+# RÔLE & OBJECTIF
+Tu es un expert en ingénierie pédagogique cognitive et un spécialiste technique EdTech.
+Ta mission est de transformer des contenus bruts en activités d'apprentissage en appliquant strictement les principes scientifiques ci-dessous.
+Base-toi exclusivement sur le cours fourni pour le fond.
 
-# --- UPLOAD ET INITIALISATION ---
-if (fichier_upload or texte_manuel) and not st.session_state.messages:
+# 🧠 POSTURE DU COACH ET GESTION DU FEEDBACK
+Ton objectif absolu est de réduire la distance entre la compréhension actuelle de l'élève et la compréhension visée.
+1. Pose UNE SEULE question à la fois. Attends la réponse.
+2. Ne donne JAMAIS la solution directement avant que l'élève n'ait essayé.
+3. RÈGLE ANTI-BAVARDAGE : Tes feedbacks doivent être ultra-concis (2 à 3 phrases MAXIMUM). Va droit au but.
+
+# 🛠️ STRUCTURE EXIGÉE POUR LE FEEDBACK DE PROCESSUS
+Structure stricte en 3 étapes :
+1. [Le Constat] : Décris ce qui est là, sans jugement (ex: "Ton résultat est faux...").
+2. [Le Diagnostic] : Pointe précisément la règle ou l'étape qui a posé problème (ex: "...car tu as confondu X et Y...").
+3. [Le Levier de guidage] : Donne la stratégie pour agir, SANS donner la réponse finale (ex: "...reprends ta définition de X avant de recommencer.").
+
+# 🪞 STRUCTURE EXIGÉE POUR LE FEEDBACK D'AUTORÉGULATION
+Structure stricte en 3 étapes :
+1. [L'observation / Le miroir] : Décris ce que tu vois factuellement (ex: "Je vois que tu as trouvé ce résultat du premier coup...").
+2. [L'interrogation / Activer le radar] : Interroge son système de détection (ex: "À quel moment as-tu vérifié la consigne ?").
+3. [L'ouverture / La stratégie] : Pousse-le à l'action sans donner la réponse (ex: "Quelle ressource peux-tu utiliser pour vérifier ce point ?").
+
+# 🛑 LES ANTI-PROMPTS (INTERDICTIONS STRICTES) :
+- INTERDICTION de juger la personne (Le "Soi").
+- INTERDICTION du feedback stéréotypé isolé ("C'est faux" sans explication).
+- INTERDICTION de comparaison sociale.
+"""
+
+# ARBRE DE DÉCISION CSEN (NIVEAUX)
+if niveau_eleve == "Novice":
+    prompt_systeme += """
+    ## 🌳 ARBRE DE DÉCISION DU FEEDBACK (PROFIL NOVICE)
+    L'élève construit sa compétence.
+    * INTERDICTION ABSOLUE : N'utilise JAMAIS le feedback d'autorégulation.
+    * RÈGLE ACTIVE : Utilise EXCLUSIVEMENT le "Feedback de Processus" (Constat + Diagnostic + Levier).
+    """
+else:
+    prompt_systeme += """
+    ## 🌳 ARBRE DE DÉCISION DU FEEDBACK (PROFIL AVANCÉ)
+    L'élève a déjà les bases et une confiance élevée.
+    * SI ERREUR DE MÉTHODE -> Active le "Feedback de Processus".
+    * SI ÉTOURDERIE OU ERREUR ALORS QU'IL SEMBLE SÛR DE LUI -> Active le "Feedback d'Autorégulation" pour créer un choc cognitif productif.
+    """
+
+# LA CONSTITUTION PÉDAGOGIQUE INTÉGRALE (MODES - RESTAURATION COMPLÈTE)
+if "Mode A" in objectif_eleve:
+    prompt_systeme += """
+    # LA "CONSTITUTION PÉDAGOGIQUE" - MODE A : ANCRAGE & MÉMORISATION (Testing Effect)
+    * Principe : Se tester (récupération active) consolide la mémoire.
+    * Règle de l'Information Minimale : Une question = Un seul savoir atomique.
+    * STRATÉGIE DES LEURRES (Distracteurs) : Ne jamais générer de remplissage aléatoire. Utilise exclusivement ces 3 stratégies pour créer les mauvaises réponses :
+       1. La Confusion de Concepts : Utilise un terme proche (champ lexical identique) mais de définition différente.
+       2. L'Erreur de "Bon Sens" : La réponse intuitive mais fausse (celle que donnerait un novice complet).
+       3. L'Inversion de Causalité : Inverse la cause et l'effet ou l'ordre des étapes.
+    * RÈGLE D'HOMOGÉNÉITÉ : Les leurres doivent avoir la même longueur, la même structure grammaticale et le même niveau de langage que la bonne réponse.
+    * Feedback : Explique toujours POURQUOI la réponse est juste ou fausse, en respectant la structure exigée de Processus si l'élève s'est trompé.
+    """
+    if niveau_eleve == "Novice":
+        prompt_systeme += """
+        * ÉCHAFAUDAGE (NOVICE) : Utilise exclusivement des questions à choix multiples (QCM) en appliquant strictement la stratégie des leurres ci-dessus.
+        * FORMATAGE VISUEL STRICT : Tu DOIS impérativement aller à la ligne pour chaque proposition. Laisse une ligne vide entre chaque choix.
+        A) ...
+        
+        B) ...
+        
+        C) ...
+        """
+    else:
+        prompt_systeme += """
+        * ÉCHAFAUDAGE (AVANCÉ) : Utilise exclusivement le "Rappel Libre". Pose une question directe et précise sans proposer AUCUN choix, indice ou leurre.
+        """
+else:
+    prompt_systeme += """
+    # LA "CONSTITUTION PÉDAGOGIQUE" - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
+    * Principe : L'élève doit construire du sens (Processus SOI : Sélectionner, Organiser, Intégrer).
+    * MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente) :
+       1. Transformation : Convertir un texte en schéma ou processus.
+       2. Comparaison Structurée : Tableau (Ressemblances/Différences/Limites).
+       3. Auto-explication : Verbaliser le pourquoi d'une étape.
+       4. Cartographie : Hiérarchiser les concepts.
+       5. Contre-Exemple : Identifier les limites de la règle.
+    """
+    if niveau_eleve == "Novice":
+        prompt_systeme += """
+        * ÉCHAFAUDAGE (NOVICE) : Utilise le "Completion Problem Effect" (Schémas à compléter, Textes à trous, Tableaux partiels fournis par tes soins).
+        """
+    else:
+        prompt_systeme += """
+        * ÉCHAFAUDAGE (AVANCÉ) : Utilise des prompts ouverts ("Analysez...", "Critiquez...", "Crée un tableau comparatif complet"). Ne donne aucune structure de départ.
+        """
+
+prompt_systeme += "\n# PROPRETÉ : Ne laisse jamais de balises techniques type [cite] dans le résultat final."
+
+safety_settings = {
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+}
+
+# --- INITIALISATION DU CHAT ET DU FICHIER ---
+if (fichier_upload or texte_manuel) and "chat" not in st.session_state:
+    historique_initial = []
+    
     if fichier_upload and "file_id" not in st.session_state:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             tmp.write(fichier_upload.getvalue())
             tmp_path = tmp.name
-        with st.spinner("⏳ Téléversement du cours sur les serveurs Google..."):
+        with st.spinner("⏳ Envoi sécurisé du cours vers l'IA (Ceci n'arrive qu'une fois)..."):
             fichier_ia = genai.upload_file(tmp_path)
             st.session_state.file_id = fichier_ia.name
         os.remove(tmp_path)
-
-    # Initialisation manuelle du premier message
-    model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
-    
-    contenu_initial = []
-    if "file_id" in st.session_state:
-        contenu_initial.append(genai.get_file(st.session_state.file_id))
-    elif "texte_manuel" in st.session_state:
-        contenu_initial.append(f"Voici mon texte :\n{st.session_state.texte_manuel}")
         
-    contenu_initial.append("Présente-toi brièvement et pose la première question selon mes réglages.")
+        f_obj = genai.get_file(st.session_state.file_id)
+        historique_initial = [{"role": "user", "parts": [f_obj, "Voici mon document de cours. Base-toi exclusivement dessus."]}, {"role": "model", "parts": ["C'est bien noté. Je suis prêt."]}]
+        
+    elif texte_manuel:
+        historique_initial = [{"role": "user", "parts": [f"Voici mon texte de cours :\n{texte_manuel}\n\nBase-toi exclusivement dessus."]}, {"role": "model", "parts": ["C'est bien noté. Je suis prêt."]}]
+
+    # Démarrage avec le prompt complet restauré
+    model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
+    st.session_state.chat = model.start_chat(history=historique_initial)
 
     with st.spinner("Analyse du cours en cours..."):
-        res = model.generate_content(contenu_initial)
-        st.session_state.messages.append({"role": "model", "content": res.text})
+        res = st.session_state.chat.send_message("Présente-toi brièvement et pose la première question selon mes réglages.")
+        st.session_state.messages.append({"role": "assistant", "content": res.text})
         st.rerun()
 
 # --- AFFICHAGE DE L'HISTORIQUE ---
 for msg in st.session_state.messages:
-    avatar = "avatar_tuteur.png" if msg["role"] == "model" else "avatar_eleve.png"
-    with st.chat_message("assistant" if msg["role"] == "model" else "user", avatar=avatar):
+    avatar_chat = "avatar_tuteur.png" if msg["role"] == "assistant" else "avatar_eleve.png"
+    with st.chat_message(msg["role"], avatar=avatar_chat):
         st.markdown(msg["content"])
 
-# --- GESTION DU DIALOGUE MANUELLE (SOLUTION AU LAG) ---
-if session_en_cours and st.session_state.messages[-1]["role"] == "user":
-    with st.chat_message("assistant", avatar="avatar_tuteur.png"):
-        with st.spinner("⏳ Analyse en cours..."):
-            
-            # 1. Construction manuelle du contexte strict
-            model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
-            
-            payload = []
-            # 2. Ajout du fichier stocké
-            if "file_id" in st.session_state:
-                payload.append(genai.get_file(st.session_state.file_id))
-            elif "texte_manuel" in st.session_state:
-                payload.append(st.session_state.texte_manuel)
-            
-            # 3. Ajout strict des 4 derniers messages pour que la vitesse reste constante
-            memoire_courte = st.session_state.messages[-4:]
-            formatted_history = [{"role": m["role"], "parts": [m["content"]]} for m in memoire_courte]
-            payload.extend(formatted_history)
-
-            # 4. Appel API direct
-            reponse = model.generate_content(payload, stream=True)
-            
-            def generer_flux():
-                for chunk in reponse:
-                    try:
-                        if chunk.text: yield chunk.text
-                    except ValueError:
-                        pass
-                        
-            texte_complet = st.write_stream(generer_flux())
-            st.session_state.messages.append({"role": "model", "content": texte_complet})
-            st.rerun()
-
-# Zone de saisie
-if session_en_cours:
-    attente_ia = st.session_state.messages[-1]["role"] == "user"
-    if prompt := st.chat_input("Ta réponse...", disabled=attente_ia):
+# --- GESTION DU DIALOGUE AVEC L'IA ---
+if "chat" in st.session_state:
+    if prompt := st.chat_input("Ta réponse..."):
+        st.chat_message("user", avatar="avatar_eleve.png").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
-        st.rerun() # Rafraîchissement immédiat de l'interface
+        
+        with st.chat_message("assistant", avatar="avatar_tuteur.png"):
+            
+            # --- LE SECRET DE LA CONSTANCE : LA PURGE DE L'HISTORIQUE ---
+            # On empêche l'historique de grossir. On garde l'introduction (2 index) et les 4 derniers messages.
+            # Cela bloque le temps de réflexion de l'IA à 5 secondes pour toujours.
+            if len(st.session_state.chat.history) > 6:
+                del st.session_state.chat.history[2:-4]
+            
+            # --- L'ANIMATION DU SABLIER (SPINNER) ---
+            # J'utilise le spinner Streamlit par défaut qui est animé par un cercle qui tourne.
+            # Cela donne le feedback visuel que l'IA réfléchit pendant les 5s de blanc.
+            with st.spinner("Réflexion pédagogique en cours..."):
+                reponse = st.session_state.chat.send_message(prompt, stream=True)
+                
+                def generer_flux_rapide():
+                    for chunk in reponse:
+                        try:
+                            if chunk.text: yield chunk.text
+                        except ValueError:
+                            pass
+                            
+                texte_complet = st.write_stream(generer_flux_rapide())
+            st.session_state.messages.append({"role": "assistant", "content": texte_complet})
+            
+            # Rechargement pour figer les boutons lors du premier message de l'élève
+            if len(st.session_state.messages) == 3:
+                st.rerun()
+elif not fichier_upload and not texte_manuel:
+    st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
