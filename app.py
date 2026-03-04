@@ -200,13 +200,14 @@ with st.sidebar:
     st.header("⚙️ Paramètres")
     disabled = st.session_state.session_active
     
-    api_key = st.text_input("Clé API Google", type="password", disabled=disabled)
     niveau = st.selectbox("Ton niveau", ["Novice", "Avancé"], disabled=disabled)
     objectif = st.selectbox("Objectif", ["Mode A (Ancrage & Mémorisation)", "Mode B (Compréhension & Transfert)"], disabled=disabled)
     uploaded_file = st.file_uploader("Charge ton cours (PDF/TXT)", type=["pdf", "txt"], disabled=disabled)
     
-    if st.button("🚀 Démarrer la session", disabled=disabled or not api_key or not uploaded_file):
+    if st.button("🚀 Démarrer la session", disabled=disabled or not uploaded_file):
         try:
+            # Récupération de la clé API invisible via les secrets
+            api_key = st.secrets["GOOGLE_API_KEY"]
             genai.configure(api_key=api_key)
             fichier_gemini = uploader_fichier_google(uploaded_file)
             st.session_state.gemini_file_name = fichier_gemini.name
@@ -217,6 +218,8 @@ with st.sidebar:
             st.session_state.objectif = objectif
             st.session_state.session_active = True
             st.rerun()
+        except KeyError:
+            st.error("⚠️ Erreur : La clé API est introuvable. Configure le fichier .streamlit/secrets.toml en local, ou l'onglet 'Secrets' sur Streamlit Cloud.")
         except Exception as e:
             st.error(f"Erreur de connexion : {e}")
 
@@ -242,7 +245,10 @@ if st.session_state.session_active:
             with st.spinner("Je prépare ta première question..."):
                 contexte = generer_contexte_optimise("Salut ! Pose-moi la première question sur le cours pour démarrer.")
                 reponse_stream = modele.generate_content(contexte, stream=True)
-                reponse_complete = st.write_stream(reponse_stream)
+                
+                # --- CORRECTION DU BUG DE STREAMING ICI ---
+                reponse_complete = st.write_stream(chunk.text for chunk in reponse_stream)
+                
                 st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
     # Boucle d'interaction avec l'opérateur Walrus
@@ -257,7 +263,10 @@ if st.session_state.session_active:
             with st.spinner("Ton tuteur analyse ta réponse..."):
                 contexte = generer_contexte_optimise(prompt)
                 reponse_stream = modele.generate_content(contexte, stream=True)
-                reponse_complete = st.write_stream(reponse_stream)
+                
+                # --- CORRECTION DU BUG DE STREAMING ICI ---
+                reponse_complete = st.write_stream(chunk.text for chunk in reponse_stream)
+                
         st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
     # Synthèse de fin de session
@@ -266,7 +275,9 @@ if st.session_state.session_active:
             with st.spinner("Je rédige le bilan de tes révisions..."):
                 contexte = generer_contexte_optimise("La session est terminée. Fais-moi un bilan très court et encourageant de mes révisions.")
                 reponse_stream = modele.generate_content(contexte, stream=True)
-                st.write_stream(reponse_stream)
+                
+                # --- CORRECTION DU BUG DE STREAMING ICI ---
+                st.write_stream(chunk.text for chunk in reponse_stream)
                 
         # Réinitialisation propre
         st.session_state.session_active = False
