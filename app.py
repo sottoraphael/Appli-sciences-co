@@ -228,7 +228,7 @@ with st.sidebar:
 if texte_manuel and not session_en_cours: st.session_state.texte_manuel = texte_manuel
 prompt_systeme = generer_prompt_systeme(niveau_eleve, objectif_eleve)
 
-# --- UPLOAD ET INITIALISATION (LA "FEUILLE DE ROUTE") ---
+# --- UPLOAD ET INITIALISATION DE L'IA ---
 if (fichier_upload or texte_manuel) and not st.session_state.messages:
     if fichier_upload and "file_id" not in st.session_state:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -253,39 +253,42 @@ if (fichier_upload or texte_manuel) and not st.session_state.messages:
 
     model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
     
-    with st.spinner("⏳ Création de ton exercice sur-mesure (Ceci prend quelques secondes)..."):
+    with st.spinner("⏳ Création de ton exercice sur-mesure..."):
         res = model.generate_content(history_init)
         st.session_state.messages.append({"role": "assistant", "content": res.text})
         st.rerun()
 
-# --- AFFICHAGE DE L'HISTORIQUE ---
+# --- 1. AFFICHAGE DES MESSAGES EXISTANTS ---
+# C'est cette boucle qui redessine l'historique visuellement à chaque interaction
 for msg in st.session_state.messages:
     avatar = "avatar_tuteur.png" if msg["role"] == "assistant" else "avatar_eleve.png"
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
 
-# --- GESTION DU DIALOGUE (AFFICHAGE IMMÉDIAT SANS LAG) ---
+# --- 2. GESTION DU NOUVEAU MESSAGE (FLUX NATIF STREAMLIT) ---
 if session_en_cours:
+    # L'opérateur Walrus := détecte si l'utilisateur a appuyé sur Entrée
     if prompt := st.chat_input("Ta réponse..."):
         
-        # 1. On affiche la réponse de l'utilisateur IMMÉDIATEMENT à l'écran
+        # 1. Ajout au Session State
         st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # 2. Affichage IMMÉDIAT à l'écran du message de l'élève (avant l'API)
         with st.chat_message("user", avatar="avatar_eleve.png"):
             st.markdown(prompt)
 
-        # 2. Dans la même foulée, on lance l'analyse de l'IA (le sablier s'affiche tout de suite)
+        # 3. Traitement de la réponse de l'IA (avec sablier intégré)
         with st.chat_message("assistant", avatar="avatar_tuteur.png"):
             
-            # Reconstruction de l'historique léger (PDF + 4 derniers messages)
+            # Reconstruction de l'historique allégé pour la vitesse (PDF + 4 derniers)
             history = []
-            memoire_courte = st.session_state.messages[:-1] # Tout sauf le message qu'on vient d'ajouter
+            memoire_courte = st.session_state.messages[:-1] 
             if len(memoire_courte) > 4:
                 memoire_courte = memoire_courte[-4:]
                 
             for m in memoire_courte:
                 history.append({"role": "model" if m["role"] == "assistant" else "user", "parts": [m["content"]]})
             
-            # Attachement du document source au début de l'historique tronqué
             if len(history) > 0 and history[0]["role"] == "model":
                 if "file_id" in st.session_state:
                     history.insert(0, {"role": "user", "parts": [genai.get_file(st.session_state.file_id), "Rappel du cours."]})
@@ -301,14 +304,22 @@ if session_en_cours:
             model_rapide = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
             chat_rapide = model_rapide.start_chat(history=history)
             
-            with st.spinner("⏳ Analyse de ta réponse en cours..."):
+            # Affichage visuel du sablier PENDANT le call API
+            with st.spinner("⏳ Le tuteur rédige sa correction..."):
                 reponse = chat_rapide.send_message(prompt, stream=True)
                 
                 def generer_flux_rapide():
                     for chunk in reponse:
-                        if chunk.text:
-                            yield chunk.text
-
+                        try:
+                            if chunk.text: yield chunk.text
+                        except ValueError:
+                            pass
+                            
+                # Le texte est streamé en temps réel
                 texte_complet = st.write_stream(generer_flux_rapide())
             
+            # Sauvegarde de la réponse de l'IA une fois terminée
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
+            
+elif not fichier_upload and not texte_manuel:
+    st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
