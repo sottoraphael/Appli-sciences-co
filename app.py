@@ -24,6 +24,10 @@ st.markdown("""
     [data-testid="stChatMessage"] { border-radius: 15px; }
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li { font-size: 1.15rem !important; line-height: 1.6 !important; }
+    
+    /* Anti-blanchissement pour une UI fluide */
+    *[data-stale="true"], *[data-stale="false"] { opacity: 1 !important; filter: none !important; transition: none !important; }
+    div[data-testid="stChatMessage"], div[data-testid="stMainBlockContainer"], [data-testid="stChatInput"] { opacity: 1 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -181,9 +185,8 @@ def afficher_bilan():
     if len(st.session_state.messages) > 1:
         with st.spinner("Analyse métacognitive en cours..."):
             historique_complet = []
-            if "file_id" in st.session_state:
-                f_obj = genai.get_file(st.session_state.file_id)
-                historique_complet.extend([{"role": "user", "parts": [f_obj, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
+            if "file_obj" in st.session_state:
+                historique_complet.extend([{"role": "user", "parts": [st.session_state.file_obj, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
             elif "texte_manuel" in st.session_state:
                 historique_complet.extend([{"role": "user", "parts": [f"Voici mon texte :\n{st.session_state.texte_manuel}"]}, {"role": "model", "parts": ["Compris."]}])
             
@@ -213,10 +216,10 @@ with st.sidebar:
             afficher_bilan()
         st.markdown("---")
         if st.button("🔄 Changer de mode (Nouvelle session)", use_container_width=True):
-            if "file_id" in st.session_state:
-                try: genai.delete_file(st.session_state.file_id)
+            if "file_obj" in st.session_state:
+                try: genai.delete_file(st.session_state.file_obj.name)
                 except: pass
-                del st.session_state.file_id
+                del st.session_state.file_obj
             if "texte_manuel" in st.session_state: del st.session_state.texte_manuel
             st.session_state.messages = []
             st.rerun()
@@ -228,15 +231,16 @@ with st.sidebar:
 if texte_manuel and not session_en_cours: st.session_state.texte_manuel = texte_manuel
 prompt_systeme = generer_prompt_systeme(niveau_eleve, objectif_eleve)
 
-# --- UPLOAD ET INITIALISATION DE L'IA ---
+# --- UPLOAD ET INITIALISATION (LA "FEUILLE DE ROUTE") ---
 if (fichier_upload or texte_manuel) and not st.session_state.messages:
-    if fichier_upload and "file_id" not in st.session_state:
+    if fichier_upload and "file_obj" not in st.session_state:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             tmp.write(fichier_upload.getvalue())
             tmp_path = tmp.name
         with st.spinner("⏳ Envoi sécurisé du cours vers l'IA..."):
             fichier_ia = genai.upload_file(tmp_path)
-            st.session_state.file_id = fichier_ia.name
+            # OPTIMISATION MAJEURE : On stocke l'objet physique en mémoire locale
+            st.session_state.file_obj = fichier_ia
         os.remove(tmp_path)
 
     consigne_init = """
@@ -246,8 +250,8 @@ if (fichier_upload or texte_manuel) and not st.session_state.messages:
     """
 
     history_init = []
-    if "file_id" in st.session_state:
-        history_init.append({"role": "user", "parts": [genai.get_file(st.session_state.file_id), consigne_init]})
+    if "file_obj" in st.session_state:
+        history_init.append({"role": "user", "parts": [st.session_state.file_obj, consigne_init]})
     elif "texte_manuel" in st.session_state:
         history_init.append({"role": "user", "parts": [f"Voici le cours :\n{st.session_state.texte_manuel}\n\n{consigne_init}"]})
 
@@ -258,29 +262,24 @@ if (fichier_upload or texte_manuel) and not st.session_state.messages:
         st.session_state.messages.append({"role": "assistant", "content": res.text})
         st.rerun()
 
-# --- 1. AFFICHAGE DES MESSAGES EXISTANTS ---
-# C'est cette boucle qui redessine l'historique visuellement à chaque interaction
+# --- AFFICHAGE DE L'HISTORIQUE ---
 for msg in st.session_state.messages:
     avatar = "avatar_tuteur.png" if msg["role"] == "assistant" else "avatar_eleve.png"
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
 
-# --- 2. GESTION DU NOUVEAU MESSAGE (FLUX NATIF STREAMLIT) ---
+# --- GESTION DU DIALOGUE (AFFICHAGE IMMÉDIAT) ---
 if session_en_cours:
-    # L'opérateur Walrus := détecte si l'utilisateur a appuyé sur Entrée
     if prompt := st.chat_input("Ta réponse..."):
         
-        # 1. Ajout au Session State
+        # 1. On sauvegarde et on affiche immédiatement à l'écran
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # 2. Affichage IMMÉDIAT à l'écran du message de l'élève (avant l'API)
         with st.chat_message("user", avatar="avatar_eleve.png"):
             st.markdown(prompt)
 
-        # 3. Traitement de la réponse de l'IA (avec sablier intégré)
+        # 2. Traitement de l'IA (sans aucun appel réseau intermédiaire)
         with st.chat_message("assistant", avatar="avatar_tuteur.png"):
             
-            # Reconstruction de l'historique allégé pour la vitesse (PDF + 4 derniers)
             history = []
             memoire_courte = st.session_state.messages[:-1] 
             if len(memoire_courte) > 4:
@@ -289,14 +288,15 @@ if session_en_cours:
             for m in memoire_courte:
                 history.append({"role": "model" if m["role"] == "assistant" else "user", "parts": [m["content"]]})
             
+            # Injection directe depuis la mémoire locale (0 seconde de latence)
             if len(history) > 0 and history[0]["role"] == "model":
-                if "file_id" in st.session_state:
-                    history.insert(0, {"role": "user", "parts": [genai.get_file(st.session_state.file_id), "Rappel du cours."]})
+                if "file_obj" in st.session_state:
+                    history.insert(0, {"role": "user", "parts": [st.session_state.file_obj, "Rappel du cours."]})
                 elif "texte_manuel" in st.session_state:
                     history.insert(0, {"role": "user", "parts": [f"Rappel du cours :\n{st.session_state.texte_manuel}"]})
             elif len(history) > 0 and history[0]["role"] == "user":
-                if "file_id" in st.session_state:
-                    history[0]["parts"].insert(0, genai.get_file(st.session_state.file_id))
+                if "file_obj" in st.session_state:
+                    history[0]["parts"].insert(0, st.session_state.file_obj)
                     history[0]["parts"].insert(1, "Rappel du cours.\n")
                 elif "texte_manuel" in st.session_state:
                     history[0]["parts"].insert(0, f"Rappel du cours :\n{st.session_state.texte_manuel}\n\n")
@@ -304,7 +304,7 @@ if session_en_cours:
             model_rapide = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
             chat_rapide = model_rapide.start_chat(history=history)
             
-            # Affichage visuel du sablier PENDANT le call API
+            # Sablier affiché instantanément
             with st.spinner("⏳ Le tuteur rédige sa correction..."):
                 reponse = chat_rapide.send_message(prompt, stream=True)
                 
@@ -315,11 +315,10 @@ if session_en_cours:
                         except ValueError:
                             pass
                             
-                # Le texte est streamé en temps réel
                 texte_complet = st.write_stream(generer_flux_rapide())
             
-            # Sauvegarde de la réponse de l'IA une fois terminée
             st.session_state.messages.append({"role": "assistant", "content": texte_complet})
-            
+            st.rerun()
+
 elif not fichier_upload and not texte_manuel:
     st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
