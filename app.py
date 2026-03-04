@@ -7,7 +7,7 @@ import os
 # ==========================================
 # CONFIGURATION DE LA PAGE & CSS
 # ==========================================
-st.set_page_config(page_title="Ton tuteur de révision", page_icon="🎓", layout="centered")
+st.set_page_config(page_title="Réviser avec les sciences cogntives", page_icon="🎓", layout="centered")
 
 st.markdown("""
     <style>
@@ -35,7 +35,7 @@ if "tutoriel_vu" not in st.session_state:
 # ==========================================
 # --- TUTORIEL D'ACCUEIL ---
 # ==========================================
-@st.dialog("👋 Bienvenue sur ton tuteur de révision")
+@st.dialog("👋 Bienvenue dans cette application de révision")
 def afficher_tutoriel():
     st.markdown("""
         <style>
@@ -44,14 +44,14 @@ def afficher_tutoriel():
         .mode-box { background-color: #F0F4F8; padding: 15px; border-radius: 12px; margin: 15px 0; border-left: 6px solid #5B9BD5; }
         </style>
         <div class="big-font">
-        Ce tuteur utilise les <b>sciences cognitives</b> pour t'aider à réviser sans stress.<br>
+        Cette application utilise les principes issus des <b>sciences cognitives</b> pour t'aider à réviser efficacement.<br>
         <div class="mode-box">
         <b>💡 Quel mode choisir ?</b><br><br>
         • <b>Mémorisation :</b> Pour retenir les définitions et les concepts "par cœur".<br><br>
         • <b>Compréhension :</b> Pour maîtriser ton cours en profondeur en l'expliquant avec tes propres mots.
         </div>
         <b>Comment l'utiliser en 3 étapes :</b><br>
-        <span class="step-title">1. ⚙️ Règle ton tuteur</span> Choisis ton mode et ton niveau.<br>
+        <span class="step-title">1. ⚙️ Règle l'application</span> Choisis ton mode et ton niveau.<br>
         <span class="step-title">2. 🧭 Donne-lui ton cours</span> Charge ton PDF ou colle ton texte.<br>
         <span class="step-title">3. 💬 Discute</span> Réponds aux questions dans le chat, et demande ton bilan à la fin !
         </div><br>
@@ -190,18 +190,17 @@ C) [Proposition 3]
 * Principe : L'élève doit construire du sens (Processus SOI : Sélectionner, Organiser, Intégrer).
 * MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente) :
    1. Transformation : Convertir un texte en schéma ou processus.
-   2. Comparaison Structurée : Tableau (Ressemblances/Différences/Limites).
-   3. Auto-explication : Verbaliser le pourquoi d'une étape.
-   4. Cartographie : Hiérarchiser les concepts.
-   5. Contre-Exemple : Identifier les limites de la règle.
+   2. Auto-explication : Verbaliser le pourquoi d'une étape.
+   3. Cartographie : Hiérarchiser les concepts.
+   4. Contre-Exemple : Identifier les limites de la règle.
 """
         if niveau_eleve == "Novice":
             prompt_systeme += """
-* ÉCHAFAUDAGE (NOVICE) : Utilise le "Completion Problem Effect" (Schémas à compléter, Textes à trous, Tableaux partiels fournis par tes soins pour réduire la charge cognitive).
+* ÉCHAFAUDAGE (NOVICE) : Utilise le "Completion Problem Effect" (Schémas à compléter, Dire quel schéma est faux parmis deux proposés).
 """
         else:
             prompt_systeme += """
-* ÉCHAFAUDAGE (AVANCÉ) : Utilise des prompts ouverts ("Analysez...", "Critiquez...", "Crée un tableau comparatif complet"). Ne donne aucune structure de départ, laisse l'élève l'organiser.
+* ÉCHAFAUDAGE (AVANCÉ) : Utilise des prompts ouverts ("Analysez...", "Critiquez...", "Explquez l'erreur dans l'exemple suivant ..."). Ne donne aucune structure de départ, laisse l'élève l'organiser.
 """
 
     prompt_systeme += """
@@ -262,7 +261,7 @@ def extraire_texte_stream(reponse):
 # ==========================================
 # INTERFACE UTILISATEUR (UI)
 # ==========================================
-st.title("🎓 Ton Tuteur de Révision")
+st.title("🎓 Réviser avec les sciences cogntives")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
 if not st.session_state.tutoriel_vu:
@@ -324,7 +323,7 @@ if st.session_state.session_active:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("model"):
-            with st.spinner("Ton tuteur analyse ta réponse..."):
+            with st.spinner("Analyse de ta réponse..."):
                 contexte = generer_contexte_optimise(prompt)
                 reponse_stream = modele.generate_content(contexte, stream=True)
                 reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
@@ -332,3 +331,4 @@ if st.session_state.session_active:
 
 else:
     st.info("👈 Remplis les paramètres à gauche et charge ton cours pour commencer à réviser !")
+
