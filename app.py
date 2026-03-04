@@ -239,13 +239,14 @@ if st.session_state.session_active:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-    # Amorçage : 1ère question posée par l'IA
+   # Amorçage : 1ère question posée par l'IA
     if len(st.session_state.messages) == 0:
-        with st.chat_message("model"):
-            with st.spinner("Je prépare ta première question..."):
-                contexte = generer_contexte_optimise("Salut ! Pose-moi la première question sur le cours pour démarrer.")
-                reponse_stream = modele.generate_content(contexte, stream=True)
-                
+        # ... (code de la 1ère question) ...
+        st.session_state.messages.append({"role": "model", "content": reponse_complete})
+
+    # Boucle d'interaction avec l'opérateur Walrus
+    if prompt := st.chat_input("Écris ta réponse ici..."):    # <--- CORRIGÉ AVEC "if"
+        # Affichage immédiat du message élève
                 # --- CORRECTION DU BUG DE STREAMING ICI ---
                 reponse_complete = st.write_stream(chunk.text for chunk in reponse_stream)
                 
@@ -288,3 +289,4 @@ if st.session_state.session_active:
 
 else:
     st.info("👈 Remplis les paramètres à gauche et charge ton cours pour commencer à réviser !")
+
