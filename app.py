@@ -29,9 +29,39 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "gemini_file_name" not in st.session_state:
     st.session_state.gemini_file_name = None
+if "tutoriel_vu" not in st.session_state:
+    st.session_state.tutoriel_vu = False
 
 # ==========================================
-# PROMPT SYSTÈME IMPOSÉ
+# --- TUTORIEL D'ACCUEIL ---
+# ==========================================
+@st.dialog("👋 Bienvenue sur ton tuteur de révision")
+def afficher_tutoriel():
+    st.markdown("""
+        <style>
+        .big-font { font-size: 1.25rem !important; line-height: 1.7 !important; color: #2D3748; }
+        .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.35rem; display: block; margin-top: 15px; }
+        .mode-box { background-color: #F0F4F8; padding: 15px; border-radius: 12px; margin: 15px 0; border-left: 6px solid #5B9BD5; }
+        </style>
+        <div class="big-font">
+        Ce tuteur utilise les <b>sciences cognitives</b> pour t'aider à réviser sans stress.<br>
+        <div class="mode-box">
+        <b>💡 Quel mode choisir ?</b><br><br>
+        • <b>Mémorisation :</b> Pour retenir les définitions et les concepts "par cœur".<br><br>
+        • <b>Compréhension :</b> Pour maîtriser ton cours en profondeur en l'expliquant avec tes propres mots.
+        </div>
+        <b>Comment l'utiliser en 3 étapes :</b><br>
+        <span class="step-title">1. ⚙️ Règle ton tuteur</span> Choisis ton mode et ton niveau.<br>
+        <span class="step-title">2. 🧭 Donne-lui ton cours</span> Charge ton PDF ou colle ton texte.<br>
+        <span class="step-title">3. 💬 Discute</span> Réponds aux questions dans le chat, et demande ton bilan à la fin !
+        </div><br>
+    """, unsafe_allow_html=True)
+    if st.button("🚀 J'ai compris, c'est parti !", use_container_width=True):
+        st.session_state.tutoriel_vu = True
+        st.rerun()
+
+# ==========================================
+# 🛑 ZONE SANCTUAIRE : PROMPT SYSTÈME 🛑
 # ==========================================
 def generer_prompt_systeme(niveau_eleve, objectif_eleve):
     prompt_systeme = """
@@ -175,7 +205,6 @@ def generer_contexte_optimise(nouvel_input):
     return contents
 
 def extraire_texte_stream(reponse):
-    """BOUCLIER ANTI-PLANTAGE : Force l'extraction propre du texte."""
     for chunk in reponse:
         try:
             if chunk.text:
@@ -187,28 +216,31 @@ def extraire_texte_stream(reponse):
 # INTERFACE UTILISATEUR (UI)
 # ==========================================
 st.title("🎓 Ton Tuteur de Révision")
-st.write("Prêt à tester tes connaissances ?")
+st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
+
+# Déclenchement du tutoriel à l'arrivée
+if not st.session_state.tutoriel_vu:
+    afficher_tutoriel()
 
 # --- PANNEAU LATÉRAL ---
 with st.sidebar:
     st.header("⚙️ Paramètres")
-    disabled = st.session_state.session_active
+    session_en_cours = st.session_state.session_active
     
-    niveau = st.selectbox("Ton niveau", ["Novice", "Avancé"], disabled=disabled)
-    objectif = st.selectbox("Objectif", ["Mode A (Ancrage & Mémorisation)", "Mode B (Compréhension & Transfert)"], disabled=disabled)
-    uploaded_file = st.file_uploader("Charge ton cours (PDF/TXT)", type=["pdf", "txt"], disabled=disabled)
+    niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
+    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
+    uploaded_file = st.file_uploader("Charge ton cours (PDF/TXT)", type=["pdf", "txt"], disabled=session_en_cours)
     
-    if st.button("🚀 Démarrer la session", disabled=disabled or not uploaded_file):
+    if st.button("🚀 Démarrer la session", disabled=session_en_cours or not uploaded_file):
         try:
-            # Récupération sécurisée de la clé via les Secrets
             api_key = st.secrets["GOOGLE_API_KEY"]
             genai.configure(api_key=api_key)
             fichier_gemini = uploader_fichier_google(uploaded_file)
             st.session_state.gemini_file_name = fichier_gemini.name
             
             st.session_state.api_key = api_key
-            st.session_state.niveau = niveau
-            st.session_state.objectif = objectif
+            st.session_state.niveau = niveau_eleve
+            st.session_state.objectif = objectif_eleve
             st.session_state.session_active = True
             st.rerun()
         except KeyError:
@@ -236,11 +268,10 @@ if st.session_state.session_active:
             with st.spinner("Je prépare ta première question..."):
                 contexte = generer_contexte_optimise("Salut ! Pose-moi la première question sur le cours pour démarrer.")
                 reponse_stream = modele.generate_content(contexte, stream=True)
-                # Utilisation de la fonction bouclier
                 reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
                 st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
-    # Boucle d'interaction (CORRIGÉ AVEC "if")
+    # Boucle d'interaction
     if prompt := st.chat_input("Écris ta réponse ici..."):
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -250,7 +281,6 @@ if st.session_state.session_active:
             with st.spinner("Ton tuteur analyse ta réponse..."):
                 contexte = generer_contexte_optimise(prompt)
                 reponse_stream = modele.generate_content(contexte, stream=True)
-                # Utilisation de la fonction bouclier
                 reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
         st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
