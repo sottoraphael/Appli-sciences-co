@@ -1,76 +1,42 @@
 import streamlit as st
 import google.generativeai as genai
 import tempfile
+import time
 import os
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layout="centered")
+# ==========================================
+# CONFIGURATION DE LA PAGE & CSS
+# ==========================================
+st.set_page_config(page_title="Ton tuteur de révision", page_icon="🎓", layout="centered")
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-session_en_cours = len(st.session_state.messages) > 0
-
-# --- CUSTOM CSS ---
 st.markdown("""
     <style>
-    .stApp { background-color: #FFFDF9; }
-    [data-testid="stSidebar"] { background-color: #F0F4F8; border-right: 1px solid #E2E8F0; }
-    .stRadio > label { font-size: 1.25rem !important; font-weight: 600 !important; color: #2D3748 !important; padding-bottom: 5px; }
-    .stRadio p { font-size: 1.05rem !important; }
-    .stButton>button { background-color: #5B9BD5; color: white; border-radius: 10px; border: none; }
-    h1, h2, h3 { color: #2D3748; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-    [data-testid="stChatMessage"] { border-radius: 15px; }
-    [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
-    [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li { font-size: 1.15rem !important; line-height: 1.6 !important; }
-    
-    /* Anti-blanchissement pour une UI fluide */
-    *[data-stale="true"], *[data-stale="false"] { opacity: 1 !important; filter: none !important; transition: none !important; }
-    div[data-testid="stChatMessage"], div[data-testid="stMainBlockContainer"], [data-testid="stChatInput"] { opacity: 1 !important; }
+    /* Anti-blanchissement lors des rechargements Streamlit */
+    .stApp { transition: all 0.1s ease-in-out; }
+    /* Masquer les menus techniques pour les collégiens */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    /* Style bienveillant pour le bouton principal */
+    .stButton>button { width: 100%; border-radius: 15px; font-weight: bold; }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-st.title("🦉 Ton tuteur de révision")
-st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
+# Constante pour la fluidité (Fenêtre glissante)
+MAX_HISTORIQUE_MESSAGES = 4 
 
-# --- TUTORIEL D'ACCUEIL ---
-@st.dialog("👋 Bienvenue sur ton tuteur de révision")
-def afficher_tutoriel():
-    st.markdown("""
-        <style>
-        .big-font { font-size: 1.25rem !important; line-height: 1.7 !important; color: #2D3748; }
-        .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.35rem; display: block; margin-top: 15px; }
-        .mode-box { background-color: #F0F4F8; padding: 15px; border-radius: 12px; margin: 15px 0; border-left: 6px solid #5B9BD5; }
-        </style>
-        <div class="big-font">
-        Ce tuteur utilise les <b>sciences cognitives</b> pour t'aider à réviser sans stress.<br>
-        <div class="mode-box">
-        <b>💡 Quel mode choisir ?</b><br><br>
-        • <b>Mémorisation :</b> Pour retenir les définitions et les concepts "par cœur".<br><br>
-        • <b>Compréhension :</b> Pour maîtriser ton cours en profondeur en l'expliquant avec tes propres mots.
-        </div>
-        <b>Comment l'utiliser en 3 étapes :</b><br>
-        <span class="step-title">1. ⚙️ Règle ton tuteur</span> Choisis ton mode et ton niveau.<br>
-        <span class="step-title">2. 🧭 Donne-lui ton cours</span> Charge ton PDF ou colle ton texte.<br>
-        <span class="step-title">3. 💬 Discute</span> Réponds aux questions dans le chat, et demande ton bilan à la fin !
-        </div><br>
-    """, unsafe_allow_html=True)
-    if st.button("🚀 J'ai compris, c'est parti !", use_container_width=True):
-        st.session_state.tutoriel_vu = True
-        st.rerun()
+# ==========================================
+# GESTION DE L'ÉTAT DE SESSION (State)
+# ==========================================
+if "session_active" not in st.session_state:
+    st.session_state.session_active = False
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "gemini_file_name" not in st.session_state:
+    st.session_state.gemini_file_name = None
 
-if "tutoriel_vu" not in st.session_state:
-    afficher_tutoriel()
-    
-# --- API KEY ---
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-else:
-    st.error("⚠️ Clé API introuvable.")
-    st.stop()
-
-# --- CONSTITUTION PÉDAGOGIQUE INTÉGRALE ---
+# ==========================================
+# PROMPT SYSTÈME IMPOSÉ (Fonction exacte)
+# ==========================================
 def generer_prompt_systeme(niveau_eleve, objectif_eleve):
     prompt_systeme = """
 # RÔLE & OBJECTIF
@@ -173,148 +139,141 @@ C) [Proposition 3]
 """
     return prompt_systeme
 
-safety_settings = {
-    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-}
+# ==========================================
+# FONCTIONS TECHNIQUES (API & Optimisation)
+# ==========================================
+def initialiser_modele(api_key, niveau, objectif):
+    """Initialise Gemini 2.5 Flash avec le prompt dynamique."""
+    genai.configure(api_key=api_key)
+    instructions = generer_prompt_systeme(niveau, objectif)
+    return genai.GenerativeModel(
+        model_name="gemini-2.5-flash",
+        system_instruction=instructions
+    )
 
-# --- DIALOGUE BILAN FINAL ---
-@st.dialog("📈 Ton Bilan de Révision")
-def afficher_bilan():
-    if len(st.session_state.messages) > 1:
-        with st.spinner("Analyse métacognitive en cours..."):
-            historique_complet = []
-            if "file_obj" in st.session_state:
-                historique_complet.extend([{"role": "user", "parts": [st.session_state.file_obj, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
-            elif "texte_manuel" in st.session_state:
-                historique_complet.extend([{"role": "user", "parts": [f"Voici mon texte :\n{st.session_state.texte_manuel}"]}, {"role": "model", "parts": ["Compris."]}])
-            
-            for msg in st.session_state.messages:
-                role = "user" if msg["role"] == "user" else "model"
-                historique_complet.append({"role": role, "parts": [msg["content"]]})
-                
-            model_bilan = genai.GenerativeModel("gemini-2.5-flash", system_instruction="Tu es un coach. Fais un bilan métacognitif factuel et encourageant de cette session. Adresse-toi à l'élève avec 'Tu'. Synthétise les acquis et les points à consolider. Ne pose plus de question.")
-            chat_bilan = model_bilan.start_chat(history=historique_complet)
-            
-            try:
-                reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan.")
-                st.success(reponse.text)
-            except Exception:
-                st.error("Impossible de générer le bilan pour le moment.")
-    else:
-        st.warning("Aucune session en cours à analyser.")
+def uploader_fichier_google(uploaded_file):
+    """Gère l'upload vers Google File API avec attente active."""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(uploaded_file.getvalue())
+        tmp_path = tmp.name
 
-# --- BARRE LATÉRALE ---
+    with st.spinner("⏳ Je lis ton cours pour préparer les questions..."):
+        g_file = genai.upload_file(tmp_path)
+        while g_file.state.name == "PROCESSING":
+            time.sleep(1)
+            g_file = genai.get_file(g_file.name)
+            
+    os.remove(tmp_path)
+    return g_file
+
+def generer_contexte_optimise(nouvel_input):
+    """
+    Construit le payload pour l'API en respectant la fenêtre glissante.
+    Garantit une consommation de tokens constante.
+    """
+    contents = []
+    
+    # 1. Ajout de la fenêtre glissante (Historique restreint)
+    historique_recent = st.session_state.messages[-MAX_HISTORIQUE_MESSAGES:]
+    for msg in historique_recent:
+        contents.append({"role": msg["role"], "parts": [msg["content"]]})
+        
+    # 2. Construction du message utilisateur courant (Fichier + Input)
+    parts_user = []
+    if st.session_state.gemini_file_name:
+        # On passe la référence du fichier (coût nul en latence)
+        parts_user.append(genai.get_file(st.session_state.gemini_file_name))
+        
+    parts_user.append(nouvel_input)
+    contents.append({"role": "user", "parts": parts_user})
+    
+    return contents
+
+# ==========================================
+# INTERFACE UTILISATEUR (UI)
+# ==========================================
+st.title("🎓 Ton Tuteur de Révision")
+st.write("Prêt à tester tes connaissances ?")
+
+# --- PANNEAU LATÉRAL (Paramétrage) ---
 with st.sidebar:
     st.header("⚙️ Paramètres")
-    niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
-    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
+    disabled = st.session_state.session_active
     
-    if session_en_cours:
-        if st.button("🏁 Terminer et voir mon bilan", use_container_width=True, type="primary"):
-            afficher_bilan()
-        st.markdown("---")
-        if st.button("🔄 Changer de mode (Nouvelle session)", use_container_width=True):
-            if "file_obj" in st.session_state:
-                try: genai.delete_file(st.session_state.file_obj.name)
-                except: pass
-                del st.session_state.file_obj
-            if "texte_manuel" in st.session_state: del st.session_state.texte_manuel
-            st.session_state.messages = []
+    api_key = st.text_input("Clé API Google", type="password", disabled=disabled)
+    niveau = st.selectbox("Ton niveau", ["Novice", "Avancé"], disabled=disabled)
+    objectif = st.selectbox("Objectif", ["Mode A (Ancrage & Mémorisation)", "Mode B (Compréhension & Transfert)"], disabled=disabled)
+    uploaded_file = st.file_uploader("Charge ton cours (PDF/TXT)", type=["pdf", "txt"], disabled=disabled)
+    
+    if st.button("🚀 Démarrer la session", disabled=disabled or not api_key or not uploaded_file):
+        try:
+            genai.configure(api_key=api_key)
+            fichier_gemini = uploader_fichier_google(uploaded_file)
+            st.session_state.gemini_file_name = fichier_gemini.name
+            
+            # Sauvegarde des paramètres
+            st.session_state.api_key = api_key
+            st.session_state.niveau = niveau
+            st.session_state.objectif = objectif
+            st.session_state.session_active = True
+            st.rerun()
+        except Exception as e:
+            st.error(f"Erreur de connexion : {e}")
+
+    # Bouton de clôture visible uniquement en session
+    if st.session_state.session_active:
+        st.divider()
+        if st.button("🛑 Terminer et voir ma synthèse"):
+            st.session_state.demande_synthese = True
             st.rerun()
 
-    st.header("🧭 Ton Cours")
-    fichier_upload = st.file_uploader("Cours (PDF uniquement)", type=["pdf"], disabled=session_en_cours)
-    texte_manuel = st.text_area("Ou colle ton texte ici :", disabled=session_en_cours)
-
-if texte_manuel and not session_en_cours: st.session_state.texte_manuel = texte_manuel
-prompt_systeme = generer_prompt_systeme(niveau_eleve, objectif_eleve)
-
-# --- UPLOAD ET INITIALISATION (RETOUR À LA QUESTION EN DIRECT) ---
-if (fichier_upload or texte_manuel) and not st.session_state.messages:
-    if fichier_upload and "file_obj" not in st.session_state:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(fichier_upload.getvalue())
-            tmp_path = tmp.name
-        with st.spinner("⏳ Envoi sécurisé du cours vers l'IA..."):
-            fichier_ia = genai.upload_file(tmp_path)
-            st.session_state.file_obj = fichier_ia
-        os.remove(tmp_path)
-
-    # On demande simplement de poser la première question en fonction du cours.
-    consigne_init = "Voici mon document de cours. Présente-toi brièvement (1 phrase) et pose la première question pour tester mes connaissances selon les réglages."
-
-    history_init = []
-    if "file_obj" in st.session_state:
-        history_init.append({"role": "user", "parts": [st.session_state.file_obj, consigne_init]})
-    elif "texte_manuel" in st.session_state:
-        history_init.append({"role": "user", "parts": [f"Voici le cours :\n{st.session_state.texte_manuel}\n\n{consigne_init}"]})
-
-    model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
+# --- ZONE DE DISCUSSION (Chat) ---
+if st.session_state.session_active:
+    modele = initialiser_modele(st.session_state.api_key, st.session_state.niveau, st.session_state.objectif)
     
-    with st.spinner("⏳ Analyse du cours et préparation de la question..."):
-        res = model.generate_content(history_init)
-        st.session_state.messages.append({"role": "assistant", "content": res.text})
-        st.rerun()
+    # Affichage de tout l'historique UI (indépendant de la fenêtre glissante API)
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            
+    # Amorçage : 1ère question posée par l'IA
+    if len(st.session_state.messages) == 0:
+        with st.chat_message("model"):
+            with st.spinner("Je prépare ta première question..."):
+                contexte = generer_contexte_optimise("Salut ! Pose-moi la première question sur le cours pour démarrer.")
+                reponse_stream = modele.generate_content(contexte, stream=True)
+                reponse_complete = st.write_stream(reponse_stream)
+                st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
-# --- AFFICHAGE DE L'HISTORIQUE ---
-for msg in st.session_state.messages:
-    avatar = "avatar_tuteur.png" if msg["role"] == "assistant" else "avatar_eleve.png"
-    with st.chat_message(msg["role"], avatar=avatar):
-        st.markdown(msg["content"])
-
-# --- GESTION DU DIALOGUE (AFFICHAGE IMMÉDIAT ET GÉNÉRATION DYNAMIQUE) ---
-if session_en_cours:
-    if prompt := st.chat_input("Ta réponse..."):
-        
-        # 1. Sauvegarde et affichage immédiat à l'écran
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user", avatar="avatar_eleve.png"):
+    # Boucle d'interaction avec l'opérateur Walrus
+    elif prompt := st.chat_input("Écris ta réponse ici..."):
+        # Affichage immédiat du message élève
+        with st.chat_message("user"):
             st.markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Réponse IA (Streaming + Fenêtre glissante)
+        with st.chat_message("model"):
+            with st.spinner("Ton tuteur analyse ta réponse..."):
+                contexte = generer_contexte_optimise(prompt)
+                reponse_stream = modele.generate_content(contexte, stream=True)
+                reponse_complete = st.write_stream(reponse_stream)
+        st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
-        # 2. Traitement de l'IA (sans délai réseau préalable)
-        with st.chat_message("assistant", avatar="avatar_tuteur.png"):
-            
-            history = []
-            memoire_courte = st.session_state.messages[:-1] 
-            if len(memoire_courte) > 4:
-                memoire_courte = memoire_courte[-4:]
+    # Synthèse de fin de session
+    if st.session_state.get("demande_synthese", False):
+        with st.chat_message("model"):
+            with st.spinner("Je rédige le bilan de tes révisions..."):
+                contexte = generer_contexte_optimise("La session est terminée. Fais-moi un bilan très court et encourageant de mes révisions.")
+                reponse_stream = modele.generate_content(contexte, stream=True)
+                st.write_stream(reponse_stream)
                 
-            for m in memoire_courte:
-                history.append({"role": "model" if m["role"] == "assistant" else "user", "parts": [m["content"]]})
-            
-            # Injection directe depuis la mémoire locale
-            if len(history) > 0 and history[0]["role"] == "model":
-                if "file_obj" in st.session_state:
-                    history.insert(0, {"role": "user", "parts": [st.session_state.file_obj, "Rappel du cours."]})
-                elif "texte_manuel" in st.session_state:
-                    history.insert(0, {"role": "user", "parts": [f"Rappel du cours :\n{st.session_state.texte_manuel}"]})
-            elif len(history) > 0 and history[0]["role"] == "user":
-                if "file_obj" in st.session_state:
-                    history[0]["parts"].insert(0, st.session_state.file_obj)
-                    history[0]["parts"].insert(1, "Rappel du cours.\n")
-                elif "texte_manuel" in st.session_state:
-                    history[0]["parts"].insert(0, f"Rappel du cours :\n{st.session_state.texte_manuel}\n\n")
-
-            model_rapide = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
-            chat_rapide = model_rapide.start_chat(history=history)
-            
-            with st.spinner("⏳ Le tuteur rédige sa correction et prépare la suite..."):
-                reponse = chat_rapide.send_message(prompt, stream=True)
-                
-                def generer_flux_rapide():
-                    for chunk in reponse:
-                        try:
-                            if chunk.text: yield chunk.text
-                        except ValueError:
-                            pass
-                            
-                texte_complet = st.write_stream(generer_flux_rapide())
-            
-            st.session_state.messages.append({"role": "assistant", "content": texte_complet})
+        # Réinitialisation propre
+        st.session_state.session_active = False
+        st.session_state.demande_synthese = False
+        st.session_state.messages = []
+        if st.button("🔄 Recommencer avec un autre cours"):
             st.rerun()
 
-elif not fichier_upload and not texte_manuel:
-    st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+else:
+    st.info("👈 Remplis les paramètres à gauche et charge ton cours pour commencer à réviser !")
