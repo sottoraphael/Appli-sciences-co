@@ -61,6 +61,53 @@ def afficher_tutoriel():
         st.rerun()
 
 # ==========================================
+# --- DIALOGUE BILAN FINAL ---
+# ==========================================
+@st.dialog("📈 Ton Bilan de Révision")
+def afficher_bilan():
+    if len(st.session_state.messages) > 1:
+        with st.spinner("Analyse métacognitive en cours..."):
+            historique_complet = []
+            
+            # Intégration du document de cours via l'API File
+            if st.session_state.gemini_file_name:
+                g_file = genai.get_file(st.session_state.gemini_file_name)
+                historique_complet.extend([{"role": "user", "parts": [g_file, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
+            
+            # Intégration de la conversation
+            for msg in st.session_state.messages:
+                role = "user" if msg["role"] == "user" else "model"
+                historique_complet.append({"role": role, "parts": [msg["content"]]})
+                
+            # Prompt injecté avec tes principes métacognitifs
+            instruction_metacognitive = """
+            Tu es un coach pédagogique. Fais un bilan métacognitif factuel et encourageant de cette session. Adresse-toi à l'élève avec 'Tu'. Synthétise les acquis et les points à consolider. Ne pose plus de question.
+            
+            Structure obligatoirement ton bilan ainsi :
+            1. Bilan des acquis : Ce qui est maîtrisé et ce qui ne l'est pas.
+            2. Analyse des erreurs : Dédramatise les erreurs et montre comment la stratégie peut être ajustée.
+            3. Conseil de délai : Explique-lui que relire donne une fausse impression de savoir (biais de fluence) et conseille-lui d'attendre un peu avant de se tester à nouveau.
+            4. Outil de suivi : Suggère-lui de noter ce bilan dans un carnet de progrès ou un journal des apprentissages.
+            """
+            
+            model_bilan = genai.GenerativeModel("gemini-2.5-flash", system_instruction=instruction_metacognitive)
+            chat_bilan = model_bilan.start_chat(history=historique_complet)
+            
+            try:
+                reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif selon tes instructions.")
+                st.success(reponse.text)
+                
+                st.divider()
+                if st.button("🔄 Fermer et recommencer une nouvelle session"):
+                    st.session_state.session_active = False
+                    st.session_state.messages = []
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Impossible de générer le bilan pour le moment : {e}")
+    else:
+        st.warning("Il faut d'abord discuter un peu avec le tuteur avant de pouvoir analyser tes réponses !")
+
+# ==========================================
 # 🛑 ZONE SANCTUAIRE : PROMPT SYSTÈME 🛑
 # ==========================================
 def generer_prompt_systeme(niveau_eleve, objectif_eleve):
@@ -218,7 +265,6 @@ def extraire_texte_stream(reponse):
 st.title("🎓 Ton Tuteur de Révision")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
-# Déclenchement du tutoriel à l'arrivée
 if not st.session_state.tutoriel_vu:
     afficher_tutoriel()
 
@@ -250,9 +296,9 @@ with st.sidebar:
 
     if st.session_state.session_active:
         st.divider()
+        # Appel direct de la fonction st.dialog ici !
         if st.button("🛑 Terminer et voir ma synthèse"):
-            st.session_state.demande_synthese = True
-            st.rerun()
+            afficher_bilan()
 
 # --- ZONE DE DISCUSSION ---
 if st.session_state.session_active:
@@ -283,20 +329,6 @@ if st.session_state.session_active:
                 reponse_stream = modele.generate_content(contexte, stream=True)
                 reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
         st.session_state.messages.append({"role": "model", "content": reponse_complete})
-
-    # Synthèse de fin
-    if st.session_state.get("demande_synthese", False):
-        with st.chat_message("model"):
-            with st.spinner("Je rédige le bilan de tes révisions..."):
-                contexte = generer_contexte_optimise("La session est terminée. Fais-moi un bilan très court et encourageant de mes révisions.")
-                reponse_stream = modele.generate_content(contexte, stream=True)
-                st.write_stream(extraire_texte_stream(reponse_stream))
-                
-        st.session_state.session_active = False
-        st.session_state.demande_synthese = False
-        st.session_state.messages = []
-        if st.button("🔄 Recommencer avec un autre cours"):
-            st.rerun()
 
 else:
     st.info("👈 Remplis les paramètres à gauche et charge ton cours pour commencer à réviser !")
