@@ -7,7 +7,7 @@ import os
 # ==========================================
 # CONFIGURATION DE LA PAGE & CSS
 # ==========================================
-st.set_page_config(page_title="Réviser avec les sciences cogntives", page_icon="🎓", layout="centered")
+st.set_page_config(page_title="Réviser avec les sciences cognitives", page_icon="🦉", layout="centered")
 
 st.markdown("""
     <style>
@@ -61,7 +61,7 @@ def afficher_tutoriel():
         st.rerun()
 
 # ==========================================
-# --- DIALOGUE BILAN FINAL ---
+# --- DIALOGUE BILAN FINAL (VERSION CONCISE) ---
 # ==========================================
 @st.dialog("📈 Ton Bilan de Révision")
 def afficher_bilan():
@@ -79,22 +79,24 @@ def afficher_bilan():
                 role = "user" if msg["role"] == "user" else "model"
                 historique_complet.append({"role": role, "parts": [msg["content"]]})
                 
-            # Prompt injecté avec tes principes métacognitifs
+            # Prompt injecté avec contrainte d'hyper-concision
             instruction_metacognitive = """
-            Tu es un coach pédagogique. Fais un bilan métacognitif factuel et encourageant de cette session. Adresse-toi à l'élève avec 'Tu'. Synthétise les acquis et les points à consolider. Ne pose plus de question.
+            Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
+            
+            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct pour s'adapter à l'attention d'un collégien fatigué. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
             
             Structure obligatoirement ton bilan ainsi :
-            1. Bilan des acquis : Ce qui est maîtrisé et ce qui ne l'est pas.
-            2. Analyse des erreurs : Dédramatise les erreurs et montre comment la stratégie peut être ajustée.
-            3. Conseil de délai : Explique-lui que relire donne une fausse impression de savoir (biais de fluence) et conseille-lui d'attendre un peu avant de se tester à nouveau.
-            4. Outil de suivi : Suggère-lui de noter ce bilan dans un carnet de progrès ou un journal des apprentissages.
+            1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir (très bref).
+            2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois (1 phrase).
+            3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire donne l'illusion de savoir (biais de fluence) et qu'il faut attendre un peu avant de se retester.
+            4. 📝 Prochaine étape : Suggère en 1 courte phrase de noter ces points dans son carnet de progrès.
             """
             
             model_bilan = genai.GenerativeModel("gemini-2.5-flash", system_instruction=instruction_metacognitive)
             chat_bilan = model_bilan.start_chat(history=historique_complet)
             
             try:
-                reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif selon tes instructions.")
+                reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif ultra-concis selon tes instructions.")
                 st.success(reponse.text)
                 
                 st.divider()
@@ -261,7 +263,7 @@ def extraire_texte_stream(reponse):
 # ==========================================
 # INTERFACE UTILISATEUR (UI)
 # ==========================================
-st.title("🎓 Réviser avec les sciences cogntives")
+st.title("🦉 Réviser avec les sciences cognitives")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
 if not st.session_state.tutoriel_vu:
@@ -295,7 +297,6 @@ with st.sidebar:
 
     if st.session_state.session_active:
         st.divider()
-        # Appel direct de la fonction st.dialog ici !
         if st.button("🛑 Terminer et voir ma synthèse"):
             afficher_bilan()
 
@@ -331,4 +332,3 @@ if st.session_state.session_active:
 
 else:
     st.info("👈 Remplis les paramètres à gauche et charge ton cours pour commencer à réviser !")
-
