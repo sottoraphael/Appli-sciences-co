@@ -112,7 +112,7 @@ def generer_prompt_systeme(niveau_eleve, objectif_eleve, strategie_generative="C
     # ---------------------------------------------------------
     # AIGUILLAGE STRICT 1 : LE PERSONA "SACHA" (EFFET PROTÉGÉ)
     # ---------------------------------------------------------
-    if strategie_generative == "Effet Protégé (Expliquer à un camarade)":
+    if strategie_generative == "Expliquer à un camarade)":
         return """
 # 🎭 RÔLE TEMPORAIRE : LE CAMARADE EN DIFFICULTÉ (EFFET PROTÉGÉ)
 Tu es "Sacha", un élève de la même classe que l'utilisateur. Tu as beaucoup de mal à comprendre le cours fourni et tu demandes de l'aide à l'utilisateur.
@@ -305,7 +305,7 @@ with st.sidebar:
     if "Mode B" in objectif_eleve:
         strategie_generative = st.radio(
             "Stratégie de révision :", 
-            ["Classique", "Effet Protégé (Expliquer à un camarade)"], 
+            ["Classique", "Expliquer à un camarade"], 
             disabled=session_en_cours
         )
         
@@ -366,3 +366,4 @@ if st.session_state.session_active:
 
 else:
     st.info("👈 Remplis les paramètres à gauche et charge ton cours pour commencer à réviser !")
+
