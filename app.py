@@ -169,6 +169,7 @@ C) [Proposition 3]
 # GARDE-FOUS FINAUX
 * Base-toi exclusivement sur le texte fourni pour le fond.
 * PROPRETÉ : Ne laisse jamais de balises techniques type [cite] ou [source] dans le résultat final.
+* MASQUAGE DE LA STRUCTURE (IMPORTANT) : N'écris JAMAIS les mots-clés ou balises comme "[Le Constat]", "[Le Diagnostic]", "[Le Levier de guidage]", "[L'observation / Le miroir]", "[L'interrogation / Activer le radar]" ou "[L'ouverture / La stratégie]" dans ta réponse finale à l'élève. Rédige ton feedback de manière fluide et naturelle. Ces balises ne servent qu'à structurer ta pensée en interne.
 """
     return prompt_systeme
 
@@ -231,7 +232,7 @@ with st.sidebar:
 if texte_manuel and not session_en_cours: st.session_state.texte_manuel = texte_manuel
 prompt_systeme = generer_prompt_systeme(niveau_eleve, objectif_eleve)
 
-# --- UPLOAD ET INITIALISATION (LA "FEUILLE DE ROUTE") ---
+# --- UPLOAD ET INITIALISATION (RETOUR À LA QUESTION EN DIRECT) ---
 if (fichier_upload or texte_manuel) and not st.session_state.messages:
     if fichier_upload and "file_obj" not in st.session_state:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -239,15 +240,11 @@ if (fichier_upload or texte_manuel) and not st.session_state.messages:
             tmp_path = tmp.name
         with st.spinner("⏳ Envoi sécurisé du cours vers l'IA..."):
             fichier_ia = genai.upload_file(tmp_path)
-            # OPTIMISATION MAJEURE : On stocke l'objet physique en mémoire locale
             st.session_state.file_obj = fichier_ia
         os.remove(tmp_path)
 
-    consigne_init = """
-    Analyse la longueur et la difficulté du cours fourni. 
-    Détermine un nombre juste et proportionnel de questions à poser pour vérifier les connaissances (par exemple entre 3 et 6).
-    Présente-toi brièvement à l'élève, annonce-lui CLAIREMENT le nombre total de questions que tu as préparées pour cette session (pour qu'il connaisse sa charge de travail), puis pose UNIQUEMENT la première question.
-    """
+    # On demande simplement de poser la première question en fonction du cours.
+    consigne_init = "Voici mon document de cours. Présente-toi brièvement (1 phrase) et pose la première question pour tester mes connaissances selon les réglages."
 
     history_init = []
     if "file_obj" in st.session_state:
@@ -257,7 +254,7 @@ if (fichier_upload or texte_manuel) and not st.session_state.messages:
 
     model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
     
-    with st.spinner("⏳ Création de ton exercice sur-mesure..."):
+    with st.spinner("⏳ Analyse du cours et préparation de la question..."):
         res = model.generate_content(history_init)
         st.session_state.messages.append({"role": "assistant", "content": res.text})
         st.rerun()
@@ -268,16 +265,16 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
 
-# --- GESTION DU DIALOGUE (AFFICHAGE IMMÉDIAT) ---
+# --- GESTION DU DIALOGUE (AFFICHAGE IMMÉDIAT ET GÉNÉRATION DYNAMIQUE) ---
 if session_en_cours:
     if prompt := st.chat_input("Ta réponse..."):
         
-        # 1. On sauvegarde et on affiche immédiatement à l'écran
+        # 1. Sauvegarde et affichage immédiat à l'écran
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="avatar_eleve.png"):
             st.markdown(prompt)
 
-        # 2. Traitement de l'IA (sans aucun appel réseau intermédiaire)
+        # 2. Traitement de l'IA (sans délai réseau préalable)
         with st.chat_message("assistant", avatar="avatar_tuteur.png"):
             
             history = []
@@ -288,7 +285,7 @@ if session_en_cours:
             for m in memoire_courte:
                 history.append({"role": "model" if m["role"] == "assistant" else "user", "parts": [m["content"]]})
             
-            # Injection directe depuis la mémoire locale (0 seconde de latence)
+            # Injection directe depuis la mémoire locale
             if len(history) > 0 and history[0]["role"] == "model":
                 if "file_obj" in st.session_state:
                     history.insert(0, {"role": "user", "parts": [st.session_state.file_obj, "Rappel du cours."]})
@@ -304,8 +301,7 @@ if session_en_cours:
             model_rapide = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
             chat_rapide = model_rapide.start_chat(history=history)
             
-            # Sablier affiché instantanément
-            with st.spinner("⏳ Le tuteur rédige sa correction..."):
+            with st.spinner("⏳ Le tuteur rédige sa correction et prépare la suite..."):
                 reponse = chat_rapide.send_message(prompt, stream=True)
                 
                 def generer_flux_rapide():
