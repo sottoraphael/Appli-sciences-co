@@ -11,17 +11,13 @@ st.set_page_config(page_title="Ton tuteur de révision", page_icon="🎓", layou
 
 st.markdown("""
     <style>
-    /* Anti-blanchissement lors des rechargements Streamlit */
     .stApp { transition: all 0.1s ease-in-out; }
-    /* Masquer les menus techniques pour les collégiens */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    /* Style bienveillant pour le bouton principal */
     .stButton>button { width: 100%; border-radius: 15px; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-# Constante pour la fluidité (Fenêtre glissante)
 MAX_HISTORIQUE_MESSAGES = 4 
 
 # ==========================================
@@ -35,7 +31,7 @@ if "gemini_file_name" not in st.session_state:
     st.session_state.gemini_file_name = None
 
 # ==========================================
-# PROMPT SYSTÈME IMPOSÉ (Fonction exacte)
+# PROMPT SYSTÈME IMPOSÉ
 # ==========================================
 def generer_prompt_systeme(niveau_eleve, objectif_eleve):
     prompt_systeme = """
@@ -140,10 +136,9 @@ C) [Proposition 3]
     return prompt_systeme
 
 # ==========================================
-# FONCTIONS TECHNIQUES (API & Optimisation)
+# FONCTIONS TECHNIQUES & SÉCURITÉ
 # ==========================================
 def initialiser_modele(api_key, niveau, objectif):
-    """Initialise Gemini 2.5 Flash avec le prompt dynamique."""
     genai.configure(api_key=api_key)
     instructions = generer_prompt_systeme(niveau, objectif)
     return genai.GenerativeModel(
@@ -152,7 +147,6 @@ def initialiser_modele(api_key, niveau, objectif):
     )
 
 def uploader_fichier_google(uploaded_file):
-    """Gère l'upload vers Google File API avec attente active."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(uploaded_file.getvalue())
         tmp_path = tmp.name
@@ -167,27 +161,27 @@ def uploader_fichier_google(uploaded_file):
     return g_file
 
 def generer_contexte_optimise(nouvel_input):
-    """
-    Construit le payload pour l'API en respectant la fenêtre glissante.
-    Garantit une consommation de tokens constante.
-    """
     contents = []
-    
-    # 1. Ajout de la fenêtre glissante (Historique restreint)
     historique_recent = st.session_state.messages[-MAX_HISTORIQUE_MESSAGES:]
     for msg in historique_recent:
         contents.append({"role": msg["role"], "parts": [msg["content"]]})
         
-    # 2. Construction du message utilisateur courant (Fichier + Input)
     parts_user = []
     if st.session_state.gemini_file_name:
-        # On passe la référence du fichier (coût nul en latence)
         parts_user.append(genai.get_file(st.session_state.gemini_file_name))
         
     parts_user.append(nouvel_input)
     contents.append({"role": "user", "parts": parts_user})
-    
     return contents
+
+def extraire_texte_stream(reponse):
+    """BOUCLIER ANTI-PLANTAGE : Force l'extraction propre du texte."""
+    for chunk in reponse:
+        try:
+            if chunk.text:
+                yield chunk.text
+        except Exception:
+            pass
 
 # ==========================================
 # INTERFACE UTILISATEUR (UI)
@@ -195,7 +189,7 @@ def generer_contexte_optimise(nouvel_input):
 st.title("🎓 Ton Tuteur de Révision")
 st.write("Prêt à tester tes connaissances ?")
 
-# --- PANNEAU LATÉRAL (Paramétrage) ---
+# --- PANNEAU LATÉRAL ---
 with st.sidebar:
     st.header("⚙️ Paramètres")
     disabled = st.session_state.session_active
@@ -206,81 +200,68 @@ with st.sidebar:
     
     if st.button("🚀 Démarrer la session", disabled=disabled or not uploaded_file):
         try:
-            # Récupération de la clé API invisible via les secrets
+            # Récupération sécurisée de la clé via les Secrets
             api_key = st.secrets["GOOGLE_API_KEY"]
             genai.configure(api_key=api_key)
             fichier_gemini = uploader_fichier_google(uploaded_file)
             st.session_state.gemini_file_name = fichier_gemini.name
             
-            # Sauvegarde des paramètres
             st.session_state.api_key = api_key
             st.session_state.niveau = niveau
             st.session_state.objectif = objectif
             st.session_state.session_active = True
             st.rerun()
         except KeyError:
-            st.error("⚠️ Erreur : La clé API est introuvable. Configure le fichier .streamlit/secrets.toml en local, ou l'onglet 'Secrets' sur Streamlit Cloud.")
+            st.error("⚠️ La clé API est introuvable dans l'onglet 'Secrets' de Streamlit Cloud.")
         except Exception as e:
-            st.error(f"Erreur de connexion : {e}")
+            st.error(f"Erreur : {e}")
 
-    # Bouton de clôture visible uniquement en session
     if st.session_state.session_active:
         st.divider()
         if st.button("🛑 Terminer et voir ma synthèse"):
             st.session_state.demande_synthese = True
             st.rerun()
 
-# --- ZONE DE DISCUSSION (Chat) ---
+# --- ZONE DE DISCUSSION ---
 if st.session_state.session_active:
     modele = initialiser_modele(st.session_state.api_key, st.session_state.niveau, st.session_state.objectif)
     
-    # Affichage de tout l'historique UI (indépendant de la fenêtre glissante API)
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-   # Amorçage : 1ère question posée par l'IA
+    # Amorçage (1ère question)
     if len(st.session_state.messages) == 0:
-        # ... (code de la 1ère question) ...
-        st.session_state.messages.append({"role": "model", "content": reponse_complete})
-
-    # Boucle d'interaction avec l'opérateur Walrus
-    if prompt := st.chat_input("Écris ta réponse ici..."):    # <--- CORRIGÉ AVEC "if"
-        # Affichage immédiat du message élève
-                # --- CORRECTION DU BUG DE STREAMING ICI ---
-                reponse_complete = st.write_stream(chunk.text for chunk in reponse_stream)
-                
+        with st.chat_message("model"):
+            with st.spinner("Je prépare ta première question..."):
+                contexte = generer_contexte_optimise("Salut ! Pose-moi la première question sur le cours pour démarrer.")
+                reponse_stream = modele.generate_content(contexte, stream=True)
+                # Utilisation de la fonction bouclier
+                reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
                 st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
-    # Boucle d'interaction avec l'opérateur Walrus
-    elif prompt := st.chat_input("Écris ta réponse ici..."):
-        # Affichage immédiat du message élève
+    # Boucle d'interaction (CORRIGÉ AVEC "if")
+    if prompt := st.chat_input("Écris ta réponse ici..."):
         with st.chat_message("user"):
             st.markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # Réponse IA (Streaming + Fenêtre glissante)
         with st.chat_message("model"):
             with st.spinner("Ton tuteur analyse ta réponse..."):
                 contexte = generer_contexte_optimise(prompt)
                 reponse_stream = modele.generate_content(contexte, stream=True)
-                
-                # --- CORRECTION DU BUG DE STREAMING ICI ---
-                reponse_complete = st.write_stream(chunk.text for chunk in reponse_stream)
-                
+                # Utilisation de la fonction bouclier
+                reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
         st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
-    # Synthèse de fin de session
+    # Synthèse de fin
     if st.session_state.get("demande_synthese", False):
         with st.chat_message("model"):
             with st.spinner("Je rédige le bilan de tes révisions..."):
                 contexte = generer_contexte_optimise("La session est terminée. Fais-moi un bilan très court et encourageant de mes révisions.")
                 reponse_stream = modele.generate_content(contexte, stream=True)
+                st.write_stream(extraire_texte_stream(reponse_stream))
                 
-                # --- CORRECTION DU BUG DE STREAMING ICI ---
-                st.write_stream(chunk.text for chunk in reponse_stream)
-                
-        # Réinitialisation propre
         st.session_state.session_active = False
         st.session_state.demande_synthese = False
         st.session_state.messages = []
@@ -289,4 +270,3 @@ if st.session_state.session_active:
 
 else:
     st.info("👈 Remplis les paramètres à gauche et charge ton cours pour commencer à réviser !")
-
