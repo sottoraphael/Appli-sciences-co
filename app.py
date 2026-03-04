@@ -7,14 +7,12 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Ton tuteur de révision", page_icon="🦉", layout="centered")
 
-# --- INITIALISATION DE LA SESSION ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# La session est en cours si le tuteur a posé sa première question
 session_en_cours = len(st.session_state.messages) > 0
 
-# --- CUSTOM CSS (ANTI-BLANCHISSEMENT) ---
+# --- CUSTOM CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #FFFDF9; }
@@ -26,16 +24,6 @@ st.markdown("""
     [data-testid="stChatMessage"] { border-radius: 15px; }
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p,
     [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li { font-size: 1.15rem !important; line-height: 1.6 !important; }
-    
-    /* INTERDICTION DE GRISER L'ÉCRAN */
-    *[data-stale="true"], *[data-stale="false"] {
-        opacity: 1 !important;
-        filter: none !important;
-        transition: none !important;
-    }
-    div[data-testid="stChatMessage"] { opacity: 1 !important; }
-    div[data-testid="stMainBlockContainer"] { opacity: 1 !important; }
-    [data-testid="stChatInput"] { opacity: 1 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -78,7 +66,7 @@ else:
     st.error("⚠️ Clé API introuvable.")
     st.stop()
 
-# --- CONSTITUTION PÉDAGOGIQUE INTÉGRALE (RESTAURÉE TEL QUEL) ---
+# --- CONSTITUTION PÉDAGOGIQUE INTÉGRALE ---
 def generer_prompt_systeme(niveau_eleve, objectif_eleve):
     prompt_systeme = """
 # RÔLE & OBJECTIF
@@ -180,7 +168,6 @@ C) [Proposition 3]
 """
     return prompt_systeme
 
-
 safety_settings = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -252,7 +239,6 @@ if (fichier_upload or texte_manuel) and not st.session_state.messages:
             st.session_state.file_id = fichier_ia.name
         os.remove(tmp_path)
 
-    # L'instruction initiale a été modifiée pour créer l'effet "Feuille de route"
     consigne_init = """
     Analyse la longueur et la difficulté du cours fourni. 
     Détermine un nombre juste et proportionnel de questions à poser pour vérifier les connaissances (par exemple entre 3 et 6).
@@ -278,63 +264,51 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
 
-# --- GESTION DU DIALOGUE AVEC L'IA (MÉCANIQUE DE VITESSE GARANTIE) ---
-if session_en_cours and st.session_state.messages[-1]["role"] == "user":
-    with st.chat_message("assistant", avatar="avatar_tuteur.png"):
-        
-        # On construit le contexte manuellement pour s'assurer que l'historique ne gonfle jamais
-        history = []
-        memoire_courte = st.session_state.messages[:-1]
-        
-        # On ne garde que les 4 derniers messages de l'historique pour l'IA
-        if len(memoire_courte) > 4:
-            memoire_courte = memoire_courte[-4:]
-            
-        for m in memoire_courte:
-            history.append({"role": "model" if m["role"] == "assistant" else "user", "parts": [m["content"]]})
-        
-        # Astuce technique infaillible : On attache le document source UNIQUEMENT au premier message de cet historique tronqué
-        if len(history) > 0 and history[0]["role"] == "model":
-            if "file_id" in st.session_state:
-                history.insert(0, {"role": "user", "parts": [genai.get_file(st.session_state.file_id), "Rappel du cours."]})
-            elif "texte_manuel" in st.session_state:
-                history.insert(0, {"role": "user", "parts": [f"Rappel du cours :\n{st.session_state.texte_manuel}"]})
-        elif len(history) > 0 and history[0]["role"] == "user":
-            if "file_id" in st.session_state:
-                history[0]["parts"].insert(0, genai.get_file(st.session_state.file_id))
-                history[0]["parts"].insert(1, "Rappel du cours.\n")
-            elif "texte_manuel" in st.session_state:
-                history[0]["parts"].insert(0, f"Rappel du cours :\n{st.session_state.texte_manuel}\n\n")
-
-        model_rapide = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
-        chat_rapide = model_rapide.start_chat(history=history)
-        
-        with st.spinner("⏳ Le tuteur rédige sa correction..."):
-            prompt = st.session_state.messages[-1]["content"]
-            reponse = chat_rapide.send_message(prompt, stream=True)
-            iterator = iter(reponse)
-            
-            try:
-                first_chunk = next(iterator)
-            except StopIteration:
-                first_chunk = None
-                
-            def generer_flux_rapide():
-                if first_chunk and first_chunk.text: yield first_chunk.text
-                for chunk in iterator:
-                    try:
-                        if chunk.text: yield chunk.text
-                    except ValueError: pass
-                    
-            texte_complet = st.write_stream(generer_flux_rapide())
-            st.session_state.messages.append({"role": "assistant", "content": texte_complet})
-            st.rerun()
-
-# Zone de saisie immédiate
+# --- GESTION DU DIALOGUE (AFFICHAGE IMMÉDIAT SANS LAG) ---
 if session_en_cours:
-    attente_ia = st.session_state.messages[-1]["role"] == "user"
-    if prompt := st.chat_input("Ta réponse...", disabled=attente_ia):
+    if prompt := st.chat_input("Ta réponse..."):
+        
+        # 1. On affiche la réponse de l'utilisateur IMMÉDIATEMENT à l'écran
         st.session_state.messages.append({"role": "user", "content": prompt})
-        st.rerun() 
-elif not fichier_upload and not texte_manuel:
-    st.info("👈 Charge un cours dans la barre latérale pour activer ton tuteur !")
+        with st.chat_message("user", avatar="avatar_eleve.png"):
+            st.markdown(prompt)
+
+        # 2. Dans la même foulée, on lance l'analyse de l'IA (le sablier s'affiche tout de suite)
+        with st.chat_message("assistant", avatar="avatar_tuteur.png"):
+            
+            # Reconstruction de l'historique léger (PDF + 4 derniers messages)
+            history = []
+            memoire_courte = st.session_state.messages[:-1] # Tout sauf le message qu'on vient d'ajouter
+            if len(memoire_courte) > 4:
+                memoire_courte = memoire_courte[-4:]
+                
+            for m in memoire_courte:
+                history.append({"role": "model" if m["role"] == "assistant" else "user", "parts": [m["content"]]})
+            
+            # Attachement du document source au début de l'historique tronqué
+            if len(history) > 0 and history[0]["role"] == "model":
+                if "file_id" in st.session_state:
+                    history.insert(0, {"role": "user", "parts": [genai.get_file(st.session_state.file_id), "Rappel du cours."]})
+                elif "texte_manuel" in st.session_state:
+                    history.insert(0, {"role": "user", "parts": [f"Rappel du cours :\n{st.session_state.texte_manuel}"]})
+            elif len(history) > 0 and history[0]["role"] == "user":
+                if "file_id" in st.session_state:
+                    history[0]["parts"].insert(0, genai.get_file(st.session_state.file_id))
+                    history[0]["parts"].insert(1, "Rappel du cours.\n")
+                elif "texte_manuel" in st.session_state:
+                    history[0]["parts"].insert(0, f"Rappel du cours :\n{st.session_state.texte_manuel}\n\n")
+
+            model_rapide = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=prompt_systeme, safety_settings=safety_settings)
+            chat_rapide = model_rapide.start_chat(history=history)
+            
+            with st.spinner("⏳ Analyse de ta réponse en cours..."):
+                reponse = chat_rapide.send_message(prompt, stream=True)
+                
+                def generer_flux_rapide():
+                    for chunk in reponse:
+                        if chunk.text:
+                            yield chunk.text
+
+                texte_complet = st.write_stream(generer_flux_rapide())
+            
+            st.session_state.messages.append({"role": "assistant", "content": texte_complet})
