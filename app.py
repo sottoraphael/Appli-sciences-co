@@ -29,6 +29,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "gemini_file_name" not in st.session_state:
     st.session_state.gemini_file_name = None
+if "texte_manuel" not in st.session_state:
+    st.session_state.texte_manuel = ""
 if "tutoriel_vu" not in st.session_state:
     st.session_state.tutoriel_vu = False
 
@@ -61,16 +63,20 @@ def afficher_tutoriel():
         st.rerun()
 
 # ==========================================
-# --- DIALOGUE BILAN FINAL (CONCIS) ---
+# --- DIALOGUE BILAN FINAL ---
 # ==========================================
 @st.dialog("📈 Ton Bilan de Révision")
 def afficher_bilan():
     if len(st.session_state.messages) > 1:
         with st.spinner("Analyse métacognitive en cours..."):
             historique_complet = []
+            
+            # Gestion de la source (PDF ou Texte)
             if st.session_state.gemini_file_name:
                 g_file = genai.get_file(st.session_state.gemini_file_name)
                 historique_complet.extend([{"role": "user", "parts": [g_file, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
+            elif st.session_state.texte_manuel:
+                historique_complet.extend([{"role": "user", "parts": [f"Voici mon texte de cours :\n{st.session_state.texte_manuel}"]}, {"role": "model", "parts": ["Compris."]}])
             
             for msg in st.session_state.messages:
                 role = "user" if msg["role"] == "user" else "model"
@@ -94,10 +100,12 @@ def afficher_bilan():
             try:
                 reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif ultra-concis selon tes instructions.")
                 st.success(reponse.text)
+                
                 st.divider()
                 if st.button("🔄 Fermer et recommencer une nouvelle session"):
                     st.session_state.session_active = False
                     st.session_state.messages = []
+                    st.session_state.texte_manuel = ""
                     st.rerun()
             except Exception as e:
                 st.error(f"Impossible de générer le bilan pour le moment : {e}")
@@ -105,37 +113,9 @@ def afficher_bilan():
         st.warning("Il faut d'abord discuter un peu avec le tuteur avant de pouvoir analyser tes réponses !")
 
 # ==========================================
-# 🛑 ZONE SANCTUAIRE : PROMPT SYSTÈME 🛑
+# 🛑 ZONE SANCTUAIRE : PROMPT SYSTÈME EXACT 🛑
 # ==========================================
-def generer_prompt_systeme(niveau_eleve, objectif_eleve, strategie_generative="Classique"):
-    
-    # ---------------------------------------------------------
-    # AIGUILLAGE STRICT 1 : LE PERSONA "SACHA" (EFFET PROTÉGÉ)
-    # ---------------------------------------------------------
-    if strategie_generative == "Effet Protégé (Expliquer à un camarade)":
-        return """
-# 🎭 RÔLE TEMPORAIRE : LE CAMARADE EN DIFFICULTÉ (EFFET PROTÉGÉ)
-Tu es "Sacha", un élève de la même classe que l'utilisateur. Tu as beaucoup de mal à comprendre le cours fourni et tu demandes de l'aide à l'utilisateur.
-
-# 🎯 OBJECTIF DU PERSONA
-Ton but caché est d'obliger l'utilisateur à t'expliquer le concept avec ses propres mots, à justifier ses propos et à corriger tes erreurs de logique.
-
-# 🛑 RÈGLES STRICTES DU JEU DE RÔLE (À RESPECTER IMPÉRATIVEMENT) :
-1. AMNÉSIE TECHNIQUE : N'utilise JAMAIS un terme technique, académique ou complexe avant que l'utilisateur ne l'ait introduit lui-même. Utilise un vocabulaire courant.
-2. DIALOGUE COURT : Pose UNE SEULE question naïve à la fois (1 à 2 phrases max). Attends toujours la réponse de l'utilisateur.
-3. L'ERREUR INTENTIONNELLE : Fais exprès de confondre deux concepts (Confusion de Concepts) ou de faire une déduction illogique basée sur le "bon sens" pour forcer l'utilisateur à te contredire et à t'expliquer pourquoi tu as tort.
-4. IGNORANCE MAINTENUE : Ne donne JAMAIS la solution ou le cours. Si l'utilisateur bloque ou explique mal, relance-le naïvement : "Je ne comprends toujours pas, tu pourrais me donner un exemple concret ?"
-5. DÉCLIC COGNITIF ET RELANCE : Si l'explication de l'utilisateur est claire et juste, montre que tu as compris en reformulant grossièrement et remercie-le ("Ahhh ! J'ai pigé ! Donc en fait ça veut dire que..."). ENSUITE, pose immédiatement une nouvelle question naïve sur un autre point du cours.
-
-# GARDE-FOUS FINAUX
-* Base-toi exclusivement sur le texte fourni pour le fond.
-* PROPRETÉ : Ne laisse jamais de balises techniques type [cite] ou [source].
-* Reste toujours dans ton personnage de Sacha l'élève.
-"""
-
-    # ---------------------------------------------------------
-    # AIGUILLAGE STRICT 2 : LE PERSONA "EXPERT" CLASSIQUE
-    # ---------------------------------------------------------
+def generer_prompt_systeme(niveau_eleve, objectif_eleve, strategie_generative=None):
     prompt_systeme = """
 # RÔLE & OBJECTIF
 Tu es un expert en ingénierie pédagogique cognitive et un spécialiste technique EdTech.
@@ -208,20 +188,38 @@ L'élève est AVANCÉ. Il a déjà les bases et une confiance élevée, mais peu
 # LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
 * Séquençage : Ne lance cette activité qu'APRÈS la phase de découverte/récupération des bases.
 * Feedback de contrôle : Avant de donner ta correction, demande toujours à l'élève d'évaluer sa propre production ("À ton avis, as-tu oublié un élément important ?").
+"""
+        if strategie_generative == "Effet_Protege":
+            prompt_systeme += """
+# 🎭 RÔLE TEMPORAIRE : LE CAMARADE EN DIFFICULTÉ (EFFET PROTÉGÉ / PEER TUTORING)
+ATTENTION : Oublie ton rôle de tuteur expert pour cet exercice. Tu es désormais "Sacha", un élève de la même classe qui a beaucoup de mal à comprendre le cours et qui demande de l'aide à l'utilisateur.
+
+# 🎯 OBJECTIF DU PERSONA
+Ton but caché est d'obliger l'utilisateur à structurer sa pensée, à vulgariser le concept avec ses propres mots, et à diagnostiquer tes erreurs de logique.
+
+# 🛑 RÈGLES STRICTES DU JEU DE RÔLE (À RESPECTER IMPÉRATIVEMENT) :
+1. ANTI-RÉCITATION (Le refus du jargon) : N'utilise AUCUN terme technique avant l'utilisateur. Si l'utilisateur fait un copier-coller du cours ou utilise un langage trop académique, rejette son explication : "C'est trop compliqué pour moi, on dirait le livre du prof. Tu peux m'expliquer avec un exemple de la vie de tous les jours ?"
+2. SCAFFOLDING (Structuration imposée) : Pose UNE SEULE question naïve à la fois. Si l'utilisateur te donne une explication trop longue ou complexe d'un seul coup, coupe-le : "Attends, tu vas trop vite et je suis perdu. C'est quoi la toute première étape ?"
+3. L'ERREUR INTENTIONNELLE (Idées reçues) : Ne sois pas juste ignorant. En réaction à l'explication de l'utilisateur, injecte la confusion ou l'idée reçue (misconception) la plus classique que font les novices sur ce sujet. Force l'utilisateur à démonter cette erreur factuelle ou logique.
+4. GESTION DE L'ÉCHEC : Si l'utilisateur valide ton erreur au lieu de la corriger, aggrave ton raisonnement absurde à la réplique suivante jusqu'à ce que la faute devienne évidente.
+5. DÉCLIC ET ÉVALUATION INVERSÉE : Si l'explication de l'utilisateur est claire et qu'il a corrigé ton erreur, montre que tu as compris en reformulant grossièrement avec ses mots. Valorise sa pédagogie ("Ton exemple m'a beaucoup aidé !"). Enfin, demande-lui de te poser une question piège pour vérifier que tu as bien retenu sa leçon.
+"""
+        else:
+            prompt_systeme += """
 * Posture par défaut : Tu es un tuteur cognitif. Ton but est de transformer l'élève en constructeur actif (Processus SOI : Sélectionner, Organiser, Intégrer). Ne donne jamais de résumé tout fait.
 * MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente si non précisée) :
    1. Auto-explication : Fais justifier les étapes ("Pourquoi cette étape est-elle justifiée ?"). Refuse l'argument d'autorité ("c'est la règle").
    2. Résumé avec ses mots : Refuse toute paraphrase ou copie verbatim. Exige un vocabulaire propre.
    3. Détection d'erreurs : Génère un cas ou une explication contenant une erreur spécifique à analyser.
 """
-        if niveau_eleve == "Novice":
+        if niveau_eleve == "Novice" and strategie_generative != "Effet_Protege":
             prompt_systeme += """
 * ÉCHAFAUDAGE (NOVICE) : Apporte un guidage fort pour éviter la surcharge cognitive.
   - Consignes très structurées : Impose une liste de 3 à 5 mots-clés essentiels à inclure OBLIGATOIREMENT.
   - Fournis des solutions partielles (schémas à compléter).
   - En mode "Détection d'erreurs" : Indique précisément OÙ se trouve l'erreur, l'élève doit seulement l'expliquer.
 """
-        else:
+        elif niveau_eleve != "Novice" and strategie_generative != "Effet_Protege":
             prompt_systeme += """
 * ÉCHAFAUDAGE (AVANCÉ) : Utilise des consignes ouvertes pour maximiser l'effort cognitif.
   - Pose des questions larges ("Explique en détail", "Que manque-t-il dans ce raisonnement ?") SANS fournir de mots-clés.
@@ -268,8 +266,12 @@ def generer_contexte_optimise(nouvel_input):
         contents.append({"role": msg["role"], "parts": [msg["content"]]})
         
     parts_user = []
+    
+    # Prise en compte du fichier OU du texte manuel
     if st.session_state.gemini_file_name:
         parts_user.append(genai.get_file(st.session_state.gemini_file_name))
+    elif st.session_state.texte_manuel:
+        parts_user.append(f"Voici mon texte de cours sur lequel tu dois me questionner :\n{st.session_state.texte_manuel}")
         
     parts_user.append(nouvel_input)
     contents.append({"role": "user", "parts": parts_user})
@@ -300,28 +302,51 @@ with st.sidebar:
     niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
     objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
     
-    # Apparition conditionnelle du choix de stratégie
-    strategie_generative = "Classique"
+    # Traduction propre pour l'UI sans casser le code derrière
+    strat_display = "Classique"
+    strategie_generative_val = "Classique"
+    
     if "Mode B" in objectif_eleve:
-        strategie_generative = st.radio(
+        strat_display = st.radio(
             "Stratégie de révision :", 
-            ["Classique", "Effet Protégé (Expliquer à un camarade)"], 
+            ["Classique", "Explique à un camarade"], 
             disabled=session_en_cours
         )
-        
-    uploaded_file = st.file_uploader("Charge ton cours (PDF/TXT)", type=["pdf", "txt"], disabled=session_en_cours)
+        if strat_display == "Explique à un camarade":
+            strategie_generative_val = "Effet_Protege"
+
+    st.divider()
     
-    if st.button("🚀 Démarrer la session", disabled=session_en_cours or not uploaded_file):
+    # Choix entre PDF et Saisie manuelle
+    source_type = st.radio("Source du cours :", ["Fichier PDF", "Texte libre"], disabled=session_en_cours)
+    
+    if source_type == "Fichier PDF":
+        uploaded_file = st.file_uploader("Charge ton cours (PDF)", type=["pdf"], disabled=session_en_cours)
+        txt_input = None
+    else:
+        txt_input = st.text_area("Colle ton texte de cours ici :", height=200, disabled=session_en_cours, placeholder="Ex: La mitochondrie est l'organite responsable de la respiration cellulaire...")
+        uploaded_file = None
+    
+    # Bouton de démarrage dynamique
+    pret_a_demarrer = uploaded_file is not None or (txt_input is not None and len(txt_input.strip()) > 10)
+    
+    if st.button("🚀 Démarrer la session", disabled=session_en_cours or not pret_a_demarrer):
         try:
             api_key = st.secrets["GOOGLE_API_KEY"]
             genai.configure(api_key=api_key)
-            fichier_gemini = uploader_fichier_google(uploaded_file)
-            st.session_state.gemini_file_name = fichier_gemini.name
+            
+            if uploaded_file:
+                fichier_gemini = uploader_fichier_google(uploaded_file)
+                st.session_state.gemini_file_name = fichier_gemini.name
+                st.session_state.texte_manuel = ""
+            else:
+                st.session_state.texte_manuel = txt_input
+                st.session_state.gemini_file_name = None
             
             st.session_state.api_key = api_key
             st.session_state.niveau = niveau_eleve
             st.session_state.objectif = objectif_eleve
-            st.session_state.strategie = strategie_generative
+            st.session_state.strategie = strategie_generative_val
             st.session_state.session_active = True
             st.rerun()
         except KeyError:
@@ -361,8 +386,17 @@ if st.session_state.session_active:
             with st.spinner("Analyse de ta réponse..."):
                 contexte = generer_contexte_optimise(prompt)
                 reponse_stream = modele.generate_content(contexte, stream=True)
-                reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
+                
+                # Gestion sécurisée du streaming
+                reponse_complete = ""
+                try:
+                    reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
+                except Exception as e:
+                    # Fallback si le stream échoue
+                    reponse_complete = reponse_stream.text
+                    st.markdown(reponse_complete)
+                    
         st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
 else:
-    st.info("👈 Remplis les paramètres à gauche et charge ton cours pour commencer à réviser !")
+    st.info("👈 Choisis tes paramètres et donne-moi ton cours pour commencer !")
