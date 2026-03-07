@@ -35,6 +35,11 @@ if "texte_manuel" not in st.session_state:
     st.session_state.texte_manuel = ""
 if "tutoriel_vu" not in st.session_state:
     st.session_state.tutoriel_vu = False
+# Variables pour la gestion fluide de la modale de fin
+if "bilan_genere" not in st.session_state:
+    st.session_state.bilan_genere = None
+if "eval_en_cours" not in st.session_state:
+    st.session_state.eval_en_cours = False
 
 # ==========================================
 # --- TUTORIEL D'ACCUEIL ---
@@ -78,12 +83,11 @@ def sauvegarder_donnees_locales(donnees):
             writer.writeheader()
         writer.writerow(donnees)
 
-@st.dialog("📝 Évaluation de la session")
 def afficher_questionnaire_evaluation():
+    """Affiche le formulaire à l'intérieur de la modale active sans utiliser @st.dialog"""
     st.write("Aide-nous à améliorer cette application. Tes réponses sont anonymes.")
     
     with st.form("form_evaluation"):
-        
         # --- 1. Stratégies ---
         st.markdown("**1. Comment as-tu travaillé aujourd'hui ?**")
         mode_a = st.checkbox("Mode Révision Rapide (J'ai fait appel à ma mémoire)")
@@ -152,67 +156,81 @@ def afficher_questionnaire_evaluation():
                     "Commentaire": commentaire.replace('\n', ' ')
                 })
                 st.success("✅ Merci ! Tes réponses ont été enregistrées.")
-                time.sleep(1.5) # Léger délai pour visualiser le succès
-                # Réinitialisation de l'application
+                time.sleep(1.5)
+                # Réinitialisation complète des variables d'état
                 st.session_state.session_active = False
                 st.session_state.messages = []
                 st.session_state.texte_manuel = ""
+                st.session_state.bilan_genere = None
+                st.session_state.eval_en_cours = False
                 st.rerun()
 
 # ==========================================
 # --- DIALOGUE BILAN FINAL ---
 # ==========================================
-@st.dialog("📈 Ton Bilan de Révision")
+@st.dialog("📈 Ton Bilan de Révision", width="large")
 def afficher_bilan():
     if len(st.session_state.messages) > 1:
-        with st.spinner("Analyse métacognitive en cours..."):
-            historique_complet = []
-            
-            # Gestion de la source (PDF ou Texte)
-            if st.session_state.gemini_file_name:
-                g_file = genai.get_file(st.session_state.gemini_file_name)
-                historique_complet.extend([{"role": "user", "parts": [g_file, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
-            elif st.session_state.texte_manuel:
-                historique_complet.extend([{"role": "user", "parts": [f"Voici mon texte de cours :\n{st.session_state.texte_manuel}"]}, {"role": "model", "parts": ["Compris."]}])
-            
-            for msg in st.session_state.messages:
-                role = "user" if msg["role"] == "user" else "model"
-                historique_complet.append({"role": role, "parts": [msg["content"]]})
+        
+        # Phase 1 : Génération (mise en cache pour éviter les appels API multiples)
+        if st.session_state.bilan_genere is None:
+            with st.spinner("Analyse métacognitive en cours..."):
+                historique_complet = []
                 
-            instruction_metacognitive = """
-            Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
-            
-            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
-            
-            Structure obligatoirement ton bilan ainsi :
-            1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir (très bref).
-            2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois (1 phrase).
-            3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire donne l'illusion de savoir (biais de fluence) et qu'il faut attendre un peu avant de se retester.
-            4. 📝 Prochaine étape : Suggère en 1 courte phrase de noter ces points dans son carnet de progrès.
-            """
-            
-            model_bilan = genai.GenerativeModel("gemini-3.0-flash", system_instruction=instruction_metacognitive)
-            chat_bilan = model_bilan.start_chat(history=historique_complet)
-            
-            try:
-                reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif ultra-concis selon tes instructions.")
-                st.success(reponse.text)
+                # Gestion de la source (PDF ou Texte)
+                if st.session_state.gemini_file_name:
+                    g_file = genai.get_file(st.session_state.gemini_file_name)
+                    historique_complet.extend([{"role": "user", "parts": [g_file, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
+                elif st.session_state.texte_manuel:
+                    historique_complet.extend([{"role": "user", "parts": [f"Voici mon texte de cours :\n{st.session_state.texte_manuel}"]}, {"role": "model", "parts": ["Compris."]}])
                 
-                st.divider()
-                # Les deux options de fin de parcours
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("🔄 Quitter sans évaluer"):
-                        st.session_state.session_active = False
-                        st.session_state.messages = []
-                        st.session_state.texte_manuel = ""
-                        st.rerun()
-                with col2:
-                    if st.button("📊 Évaluer l'outil (1 min)", type="primary"):
-                        afficher_questionnaire_evaluation()
-                        
-            except Exception as e:
-                st.error(f"Impossible de générer le bilan pour le moment : {e}")
+                for msg in st.session_state.messages:
+                    role = "user" if msg["role"] == "user" else "model"
+                    historique_complet.append({"role": role, "parts": [msg["content"]]})
+                    
+                instruction_metacognitive = """
+                Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
+                
+                CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
+                
+                Structure obligatoirement ton bilan ainsi :
+                1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir (très bref).
+                2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois (1 phrase).
+                3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire donne l'illusion de savoir (biais de fluence) et qu'il faut attendre un peu avant de se retester.
+                4. 📝 Prochaine étape : Suggère en 1 courte phrase de noter ces points dans son carnet de progrès.
+                """
+                
+                model_bilan = genai.GenerativeModel("gemini-3.0-flash", system_instruction=instruction_metacognitive)
+                chat_bilan = model_bilan.start_chat(history=historique_complet)
+                
+                try:
+                    reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif ultra-concis selon tes instructions.")
+                    st.session_state.bilan_genere = reponse.text
+                except Exception as e:
+                    st.error(f"Impossible de générer le bilan pour le moment : {e}")
+                    return # Stoppe l'exécution si l'API échoue
+
+        # Affichage du bilan
+        st.success(st.session_state.bilan_genere)
+        st.divider()
+
+        # Phase 2 : Routage intra-modale (Boutons ou Formulaire)
+        if not st.session_state.eval_en_cours:
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 Quitter sans évaluer"):
+                    st.session_state.session_active = False
+                    st.session_state.messages = []
+                    st.session_state.texte_manuel = ""
+                    st.session_state.bilan_genere = None
+                    st.rerun()
+            with col2:
+                if st.button("📊 Évaluer l'outil (1 min)", type="primary"):
+                    st.session_state.eval_en_cours = True
+                    st.rerun() # Recharge la modale pour afficher le formulaire
+        else:
+            afficher_questionnaire_evaluation()
+
     else:
         st.warning("Il faut d'abord discuter un peu avec le tuteur avant de pouvoir analyser tes réponses !")
 
@@ -344,6 +362,7 @@ Ton but caché est d'obliger l'utilisateur à structurer sa pensée, à vulgaris
 def initialiser_modele(api_key, niveau, objectif, strategie):
     genai.configure(api_key=api_key)
     instructions = generer_prompt_systeme(niveau, objectif, strategie)
+    
     return genai.GenerativeModel(
         model_name="gemini-3.0-flash",
         system_instruction=instructions
@@ -371,7 +390,6 @@ def generer_contexte_optimise(nouvel_input):
         
     parts_user = []
     
-    # Prise en compte du fichier OU du texte manuel
     if st.session_state.gemini_file_name:
         parts_user.append(genai.get_file(st.session_state.gemini_file_name))
     elif st.session_state.texte_manuel:
@@ -406,7 +424,6 @@ with st.sidebar:
     niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
     objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
     
-    # Traduction propre pour l'UI sans casser le code derrière
     strat_display = "Classique"
     strategie_generative_val = "Classique"
     
@@ -421,7 +438,6 @@ with st.sidebar:
 
     st.divider()
     
-    # Choix entre PDF et Saisie manuelle
     source_type = st.radio("Source du cours :", ["Fichier PDF", "Texte libre"], disabled=session_en_cours)
     
     if source_type == "Fichier PDF":
@@ -431,7 +447,6 @@ with st.sidebar:
         txt_input = st.text_area("Colle ton texte de cours ici :", height=200, disabled=session_en_cours, placeholder="Ex: La mitochondrie est l'organite responsable de la respiration cellulaire...")
         uploaded_file = None
     
-    # Bouton de démarrage dynamique
     pret_a_demarrer = uploaded_file is not None or (txt_input is not None and len(txt_input.strip()) > 10)
     
     if st.button("🚀 Démarrer la session", disabled=session_en_cours or not pret_a_demarrer):
@@ -471,7 +486,6 @@ if st.session_state.session_active:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-    # Amorçage (1ère question)
     if len(st.session_state.messages) == 0:
         with st.chat_message("model"):
             with st.spinner("Je prépare l'exercice..."):
@@ -480,7 +494,6 @@ if st.session_state.session_active:
                 reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
                 st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
-    # Boucle d'interaction
     if prompt := st.chat_input("Écris ta réponse ici..."):
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -491,12 +504,10 @@ if st.session_state.session_active:
                 contexte = generer_contexte_optimise(prompt)
                 reponse_stream = modele.generate_content(contexte, stream=True)
                 
-                # Gestion sécurisée du streaming
                 reponse_complete = ""
                 try:
                     reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
                 except Exception as e:
-                    # Fallback si le stream échoue
                     reponse_complete = reponse_stream.text
                     st.markdown(reponse_complete)
                     
@@ -504,4 +515,3 @@ if st.session_state.session_active:
 
 else:
     st.info("👈 Choisis tes paramètres et donne-moi ton cours pour commencer !")
-
