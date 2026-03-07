@@ -200,7 +200,7 @@ def afficher_bilan():
                 4. 📝 Prochaine étape : Suggère en 1 courte phrase de noter ces points dans son carnet de progrès.
                 """
                 
-                model_bilan = genai.GenerativeModel("gemini-3.0-flash", system_instruction=instruction_metacognitive)
+                model_bilan = genai.GenerativeModel("gemini-2.5-flash", system_instruction=instruction_metacognitive)
                 chat_bilan = model_bilan.start_chat(history=historique_complet)
                 
                 try:
@@ -364,7 +364,7 @@ def initialiser_modele(api_key, niveau, objectif, strategie):
     instructions = generer_prompt_systeme(niveau, objectif, strategie)
     
     return genai.GenerativeModel(
-        model_name="gemini-3.0-flash",
+        model_name="gemini-2.5-flash",
         system_instruction=instructions
     )
 
