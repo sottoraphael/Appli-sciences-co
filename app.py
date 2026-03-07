@@ -3,6 +3,8 @@ import google.generativeai as genai
 import tempfile
 import time
 import os
+import csv
+import datetime
 
 # ==========================================
 # CONFIGURATION DE LA PAGE & CSS
@@ -63,6 +65,101 @@ def afficher_tutoriel():
         st.rerun()
 
 # ==========================================
+# --- GESTION DES DONNÉES D'ÉVALUATION ---
+# ==========================================
+def sauvegarder_donnees_locales(donnees):
+    """Sauvegarde factuelle des données dans un fichier CSV local pour analyse ultérieure."""
+    fichier_csv = 'donnees_impact_cognitif.csv'
+    fichier_existe = os.path.isfile(fichier_csv)
+    
+    with open(fichier_csv, mode='a', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=donnees.keys())
+        if not fichier_existe:
+            writer.writeheader()
+        writer.writerow(donnees)
+
+@st.dialog("📝 Évaluation de la session")
+def afficher_questionnaire_evaluation():
+    st.write("Aide-nous à améliorer cette application. Tes réponses sont anonymes.")
+    
+    with st.form("form_evaluation"):
+        
+        # --- 1. Stratégies ---
+        st.markdown("**1. Comment as-tu travaillé aujourd'hui ?**")
+        mode_a = st.checkbox("Mode Révision Rapide (J'ai fait appel à ma mémoire)")
+        mode_b = st.checkbox("Mode Réflexion (J'ai pris le temps d'expliquer et de comprendre)")
+        
+        st.caption("Si tu as utilisé le Mode Réflexion, précise :")
+        col1, col2 = st.columns(2)
+        with col1:
+            strat_sacha = st.checkbox("J'ai expliqué à Sacha")
+        with col2:
+            strat_auto = st.checkbox("J'ai résumé avec mes mots")
+            
+        st.divider()
+
+        # --- 2. Expérience Utilisateur (UX) ---
+        st.markdown("**2. Ton avis sur l'application**")
+        ux_interface = st.slider(
+            "Facilité d'utilisation (1 = Très compliqué, 5 = Très simple)",
+            min_value=1, max_value=5, value=3
+        )
+        ux_consignes = st.slider(
+            "Clarté des explications de l'IA (1 = Incompréhensible, 5 = Très clair)",
+            min_value=1, max_value=5, value=3
+        )
+        
+        st.divider()
+
+        # --- 3. Métacognition & Charge Cognitive ---
+        st.markdown("**3. Ton apprentissage**")
+        sentiment_maitrise = st.slider(
+            "As-tu l'impression de mieux connaître ton cours ? (1 = Pas du tout, 5 = Tout à fait)",
+            min_value=1, max_value=5, value=3
+        )
+        capacite_explication = st.slider(
+            "Serais-tu capable d'expliquer cette leçon demain ? (1 = Pas du tout, 5 = Tout à fait)",
+            min_value=1, max_value=5, value=3
+        )
+        effort_cognitif = st.slider(
+            "Effort mental fourni (1 = Très facile / Passif, 5 = Très fatigant / Difficile)",
+            min_value=1, max_value=5, value=3
+        )
+        
+        st.divider()
+
+        # --- 4. Qualitatif ---
+        commentaire = st.text_area("Un mot à ajouter ? (Ce qui t'a aidé ou bloqué)", placeholder="Facultatif...")
+        consentement = st.checkbox("J'accepte d'envoyer ces réponses anonymes pour améliorer l'application.", value=False)
+
+        soumis = st.form_submit_button("Envoyer mon bilan", type="primary")
+        
+        if soumis:
+            if not consentement:
+                st.error("Tu dois cocher la case de consentement pour envoyer tes réponses.")
+            else:
+                sauvegarder_donnees_locales({
+                    "Date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "Mode_A": mode_a,
+                    "Mode_B": mode_b,
+                    "Strat_Sacha": strat_sacha,
+                    "Strat_AutoExp": strat_auto,
+                    "UX_Interface": ux_interface,
+                    "UX_Consignes": ux_consignes,
+                    "Maitrise": sentiment_maitrise,
+                    "Transfert": capacite_explication,
+                    "Effort_Cognitif": effort_cognitif,
+                    "Commentaire": commentaire.replace('\n', ' ')
+                })
+                st.success("✅ Merci ! Tes réponses ont été enregistrées.")
+                time.sleep(1.5) # Léger délai pour visualiser le succès
+                # Réinitialisation de l'application
+                st.session_state.session_active = False
+                st.session_state.messages = []
+                st.session_state.texte_manuel = ""
+                st.rerun()
+
+# ==========================================
 # --- DIALOGUE BILAN FINAL ---
 # ==========================================
 @st.dialog("📈 Ton Bilan de Révision")
@@ -102,11 +199,18 @@ def afficher_bilan():
                 st.success(reponse.text)
                 
                 st.divider()
-                if st.button("🔄 Fermer et recommencer une nouvelle session"):
-                    st.session_state.session_active = False
-                    st.session_state.messages = []
-                    st.session_state.texte_manuel = ""
-                    st.rerun()
+                # Les deux options de fin de parcours
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🔄 Quitter sans évaluer"):
+                        st.session_state.session_active = False
+                        st.session_state.messages = []
+                        st.session_state.texte_manuel = ""
+                        st.rerun()
+                with col2:
+                    if st.button("📊 Évaluer l'outil (1 min)", type="primary"):
+                        afficher_questionnaire_evaluation()
+                        
             except Exception as e:
                 st.error(f"Impossible de générer le bilan pour le moment : {e}")
     else:
