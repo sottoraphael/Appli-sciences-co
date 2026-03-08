@@ -66,7 +66,7 @@ def afficher_tutoriel():
 # ==========================================
 # --- DIALOGUE BILAN FINAL & WOOCLAP ---
 # ==========================================
-# Utilisation de width="large" pour assurer un bon affichage de l'iframe
+# Le paramètre width="large" est crucial pour laisser la place à l'iframe Wooclap
 @st.dialog("📈 Ton Bilan de Révision", width="large")
 def afficher_bilan():
     if len(st.session_state.messages) > 1:
@@ -105,11 +105,14 @@ def afficher_bilan():
                 
                 st.divider()
                 
-                # --- INTÉGRATION WOOCLAP ---
+                # --- INTÉGRATION STRICTE DE L'IFRAME WOOCLAP ---
                 st.markdown("### 📊 Évaluation de l'outil")
                 st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
                 
+                # Code exact fourni dans la consigne
                 iframe_wooclap = """<iframe allowfullscreen frameborder="0" height="100%" mozallowfullscreen src="https://app.wooclap.com/FBXMBG/questionnaires/69ad313cc7cb13027e159133" style="min-height: 550px; min-width: 300px" width="100%"></iframe>"""
+                
+                # Appel du composant HTML de Streamlit pour rendre l'iframe
                 components.html(iframe_wooclap, height=580)
                 
                 st.divider()
