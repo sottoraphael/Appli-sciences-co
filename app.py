@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import google.generativeai as genai
-from streamlit_mathlive import st_mathlive # Import du composant mathématique
+from st_mathlive import mathfield 
 import tempfile
 import time
 import os
@@ -36,7 +36,7 @@ if "texte_manuel" not in st.session_state:
 if "tutoriel_vu" not in st.session_state:
     st.session_state.tutoriel_vu = False
 if "math_mode" not in st.session_state:
-    st.session_state.math_mode = False # Variable d'état pour le clavier
+    st.session_state.math_mode = False 
 
 # ==========================================
 # --- TUTORIEL D'ACCUEIL ---
@@ -87,16 +87,14 @@ def afficher_bilan():
                 
             instruction_metacognitive = """
             Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
-            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
-            
+            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point.
             Structure obligatoirement ton bilan ainsi :
-            1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir (très bref).
-            2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois (1 phrase).
+            1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir.
+            2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois.
             3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire donne l'illusion de savoir (biais de fluence) et qu'il faut attendre un peu avant de se retester.
             4. 📝 Prochaine étape : Suggère en 1 courte phrase de noter ces points dans son carnet de progrès.
             """
             
-            # Application stricte du modèle requis : Gemini 3 Flash Preview
             model_bilan = genai.GenerativeModel("gemini-3-flash-preview", system_instruction=instruction_metacognitive)
             chat_bilan = model_bilan.start_chat(history=historique_complet)
             
@@ -106,7 +104,6 @@ def afficher_bilan():
                 
                 st.divider()
                 
-                # --- INTÉGRATION STRICTE DE L'IFRAME WOOCLAP ---
                 st.markdown("### 📊 Évaluation de l'outil")
                 st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
                 
@@ -268,9 +265,8 @@ Utilise des consignes ouvertes pour maximiser l'effort cognitif :
 def initialiser_modele(api_key, niveau, objectif, strategie):
     genai.configure(api_key=api_key)
     instructions = generer_prompt_systeme(niveau, objectif, strategie)
-    # Application stricte du modèle requis : Gemini 3 Flash Preview
     return genai.GenerativeModel(
-        model_name="gemini-3-flash-preview",
+        model_name="gemini-3-flash-preview", 
         system_instruction=instructions
     )
 
@@ -344,7 +340,6 @@ with st.sidebar:
 
     st.divider()
     
-    # Bouton d'activation du clavier mathématique
     st.session_state.math_mode = st.toggle("🔢 Activer le clavier mathématique", value=st.session_state.math_mode, disabled=session_en_cours)
     
     st.divider()
@@ -393,12 +388,10 @@ with st.sidebar:
 if st.session_state.session_active:
     modele = initialiser_modele(st.session_state.api_key, st.session_state.niveau, st.session_state.objectif, st.session_state.strategie)
     
-    # Affichage de l'historique
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-    # Amorçage (1ère question)
     if len(st.session_state.messages) == 0:
         with st.chat_message("model"):
             with st.spinner("Je prépare l'exercice..."):
@@ -407,27 +400,28 @@ if st.session_state.session_active:
                 reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
                 st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
-    # --- ZONE DE SAISIE AVEC OPTION MATHLIVE ---
-    # Container pour lier visuellement l'éditeur et le champ texte
     with st.container():
         latex_input = ""
         
-        # Affichage conditionnel de l'éditeur WYSIWYG
         if st.session_state.math_mode:
             st.caption("📝 1. Saisis ton calcul avec le clavier mathématique :")
-            # Le composant MathLive renvoie le code LaTeX de l'équation tapée
-            latex_input = st_mathlive(value="", key=f"math_editor_{len(st.session_state.messages)}")
+            try:
+                latex_input, mathml_input = mathfield(
+                    title="Équation",
+                    value=r"",
+                    key=f"math_editor_{len(st.session_state.messages)}"
+                )
+            except Exception as e:
+                st.error("L'éditeur mathématique est temporairement indisponible. Veuillez utiliser le texte simple.")
+                latex_input = ""
             
             if latex_input:
-                # Feedback visuel pour montrer à l'élève ce que l'IA va lire
                 st.latex(latex_input)
 
-        # Champ de texte classique pour déclencher l'envoi
         if prompt := st.chat_input("💬 2. Écris ton explication ici puis appuie sur Entrée pour envoyer..."):
             
             message_complet = prompt
             
-            # Assemblage de l'équation et de l'explication si le mode est actif
             if st.session_state.math_mode and latex_input:
                 message_complet = f"{prompt}\n\n**Formule saisie :** ${latex_input}$"
             
