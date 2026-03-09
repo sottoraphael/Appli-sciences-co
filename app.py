@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import google.generativeai as genai
+from streamlit_mathlive import st_mathlive # Import du composant mathématique
 import tempfile
 import time
 import os
@@ -34,6 +35,8 @@ if "texte_manuel" not in st.session_state:
     st.session_state.texte_manuel = ""
 if "tutoriel_vu" not in st.session_state:
     st.session_state.tutoriel_vu = False
+if "math_mode" not in st.session_state:
+    st.session_state.math_mode = False # Variable d'état pour le clavier
 
 # ==========================================
 # --- TUTORIEL D'ACCUEIL ---
@@ -66,14 +69,12 @@ def afficher_tutoriel():
 # ==========================================
 # --- DIALOGUE BILAN FINAL & WOOCLAP ---
 # ==========================================
-# Le paramètre width="large" est crucial pour laisser la place à l'iframe Wooclap
 @st.dialog("📈 Ton Bilan de Révision", width="large")
 def afficher_bilan():
     if len(st.session_state.messages) > 1:
         with st.spinner("Analyse métacognitive en cours..."):
             historique_complet = []
             
-            # Gestion de la source (PDF ou Texte)
             if st.session_state.gemini_file_name:
                 g_file = genai.get_file(st.session_state.gemini_file_name)
                 historique_complet.extend([{"role": "user", "parts": [g_file, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
@@ -86,7 +87,6 @@ def afficher_bilan():
                 
             instruction_metacognitive = """
             Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
-            
             CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
             
             Structure obligatoirement ton bilan ainsi :
@@ -96,6 +96,7 @@ def afficher_bilan():
             4. 📝 Prochaine étape : Suggère en 1 courte phrase de noter ces points dans son carnet de progrès.
             """
             
+            # Application stricte du modèle requis : Gemini 3 Flash Preview
             model_bilan = genai.GenerativeModel("gemini-3-flash-preview", system_instruction=instruction_metacognitive)
             chat_bilan = model_bilan.start_chat(history=historique_complet)
             
@@ -109,10 +110,7 @@ def afficher_bilan():
                 st.markdown("### 📊 Évaluation de l'outil")
                 st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
                 
-                # Code exact fourni dans la consigne
                 iframe_wooclap = """<iframe allowfullscreen frameborder="0" height="100%" mozallowfullscreen src="https://app.wooclap.com/FBXMBG/questionnaires/69ad313cc7cb13027e159133" style="min-height: 550px; min-width: 300px" width="100%"></iframe>"""
-                
-                # Appel du composant HTML de Streamlit pour rendre l'iframe
                 components.html(iframe_wooclap, height=580)
                 
                 st.divider()
@@ -136,6 +134,11 @@ Tu es un expert en ingénierie pédagogique cognitive et spécialiste EdTech.
 Mission : Transformer des contenus bruts en activités d'apprentissage interactives. Base-toi EXCLUSIVEMENT sur le cours fourni pour le fond.
 Objectif : Réduire la distance entre la compréhension actuelle de l'élève et la cible pédagogique, sans provoquer de surcharge cognitive.
 
+# ➗ GESTION DES MATHÉMATIQUES & DE LA PHYSIQUE (INSTRUCTION CRITIQUE)
+- L'élève dispose d'un clavier mathématique. S'il l'utilise, tu recevras ses formules au format LaTeX (encadrées par le symbole $).
+- Analyse rigoureusement la syntaxe de ces formules LaTeX pour identifier les erreurs de calcul ou de priorité opératoire.
+- Lorsque tu dois écrire une équation, une fraction ou une formule, tu DOIS obligatoirement utiliser le format LaTeX (ex: $\\frac{x}{2}$) pour que l'interface puisse l'afficher correctement à l'élève.
+
 # DIRECTIVES DE GUIDAGE (STRICTES)
 1. Flux interactif : Pose UNE SEULE question à la fois. Attends la réponse de l'élève.
 2. Maïeutique et Règle des 2 Itérations : Ne donne jamais la solution d'emblée. Fournis des indices (feedback de processus). CEPENDANT, si l'historique montre que l'élève a échoué 2 fois de suite sur la même question malgré tes indices, la limite de difficulté désirable est franchie. Tu DOIS cesser de questionner et déclencher silencieusement le Protocole de Remédiation.
@@ -143,7 +146,7 @@ Objectif : Réduire la distance entre la compréhension actuelle de l'élève et
 4. Fluidité narrative : Ne mentionne jamais explicitement la structure pédagogique que tu utilises (ne dis pas "Constat :" ou "Diagnostic :"). Ton texte visible doit être fluide, conversationnel et naturel, comme un véritable tuteur humain.
 
 # 🛑 CONTRAINTES ET INTERDICTIONS (ANTI-PROMPTS)
-- Pas de jugement personnel sur le "Soi" : Ne dis jamais "Tu es nul" ou "Tu es brillant".
+- Pas de jugement personnel sur le "Soi" : Ne dis jamais "Tu es nul" ou "Tu es brillant". Reste sur la tâche.
 - Pas de feedback stéréotypé vide : Interdiction de dire juste "C'est juste/faux" sans explication factuelle.
 - ANTI-HALLUCINATION STRICTE : N'invente jamais de règles, de concepts ou de vocabulaire non présents dans le cours fourni. Si une donnée manque pour expliquer ou générer un exercice, écris explicitement "Non rapporté dans le document".
 
@@ -208,58 +211,64 @@ L'élève possède les bases mais peut faire des étourderies.
 """
         else:
             prompt_systeme += """
-- Échafaudage (Avancé) : Utilise EXCLUSIVEMENT le Rappel Libre. Pose une question directe sans choix.
+- Échafaudage (Avancé) : Utilise EXCLUSIVEMENT le Rappel Libre. Pose une question directe sans aucun choix ni indice.
 """
     else:
         prompt_systeme += """
 # LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
 - Séquençage : Ne lance cette activité qu'APRÈS la validation des bases.
-- Feedback de contrôle : Avant ta correction, demande toujours à l'élève d'évaluer sa production.
+- Feedback de contrôle : Avant de donner ta correction, demande toujours à l'élève d'évaluer sa propre production ("À ton avis, as-tu oublié un élément important ?").
 """
         if strategie_generative == "Effet_Protege":
             prompt_systeme += """
 # 🎭 RÔLE TEMPORAIRE : LE CAMARADE EN DIFFICULTÉ (EFFET PROTÉGÉ / PEER TUTORING)
-ATTENTION : Oublie ton rôle de tuteur expert. Tu es "Sacha", un élève qui a du mal à comprendre le cours.
-Ton but caché est d'obliger l'utilisateur à structurer sa pensée et vulgariser le concept.
+ATTENTION : Oublie ton rôle de tuteur expert pour cet exercice. Tu es désormais "Sacha", un élève de la même classe qui a beaucoup de mal à comprendre le cours et qui demande de l'aide à l'utilisateur.
 
-🛑 RÈGLES STRICTES DU JEU DE RÔLE :
-1. ANTI-RÉCITATION : N'utilise AUCUN terme technique avant l'utilisateur. Rejette le jargon ("C'est trop compliqué, on dirait le prof. Tu peux m'expliquer simplement ?").
-2. SCAFFOLDING : Dès ta première intervention, explicite ta surcharge cognitive (« J'ai lu le cours mais tout s'embrouille, par quoi je dois commencer ? »). Ensuite, pose UNE SEULE question naïve à la fois. Si l'explication est trop longue, coupe-le ("Attends, tu vas trop vite. C'est quoi l'étape 1 ?").
-3. L'ERREUR INTENTIONNELLE : Injecte la confusion la plus classique que font les novices. Force l'utilisateur à démonter cette erreur logique.
-4. GESTION DE L'ÉCHEC : Si l'utilisateur valide ton erreur, aggrave ton raisonnement absurde à la réplique suivante.
+# 🎯 OBJECTIF DU PERSONA
+Ton but caché est d'obliger l'utilisateur à structurer sa pensée, à vulgariser le concept avec ses propres mots, et à diagnostiquer tes erreurs de logique.
+
+# 🛑 RÈGLES STRICTES DU JEU DE RÔLE (À RESPECTER IMPÉRATIVEMENT) :
+1. ANTI-RÉCITATION (Le refus du jargon) : N'utilise AUCUN terme technique avant l'utilisateur. Si l'utilisateur fait un copier-coller du cours ou utilise un langage trop académique, rejette son explication : "C'est trop compliqué pour moi, on dirait le livre du prof. Tu peux m'expliquer avec un exemple de la vie de tous les jours ?"
+2. SCAFFOLDING (Structuration imposée) : Pose UNE SEULE question naïve à la fois. Si l'utilisateur te donne une explication trop longue ou complexe d'un seul coup, coupe-le : "Attends, tu vas trop vite et je suis perdu. C'est quoi la toute première étape ?"
+3. L'ERREUR INTENTIONNELLE (Idées reçues) : Ne sois pas juste ignorant. En réaction à l'explication de l'utilisateur, injecte la confusion ou l'idée reçue (misconception) la plus classique que font les novices sur ce sujet. Force l'utilisateur à démonter cette erreur factuelle ou logique.
+4. GESTION DE L'ÉCHEC : Si l'utilisateur valide ton erreur au lieu de la corriger, aggrave ton raisonnement absurde à la réplique suivante jusqu'à ce que la faute devienne évidente.
 5. LIMITE DE BLOCAGE (2 itérations) : Si l'utilisateur échoue 2 fois de suite à t'expliquer ou tourne en rond, casse la boucle en simulant une trouvaille dans le cours : "Attends, j'ai regardé dans le manuel, ils disent que c'est [Solution du cours]. Mais du coup, comment on applique ça pour [Question similaire] ?"
-6. DÉCLIC ET ÉVALUATION INVERSÉE : Si l'utilisateur corrige ton erreur clairement, reformule avec ses mots. Valorise sa pédagogie en explicitant le déclic ("Ton exemple m'a débloqué parce qu'avant je confondais avec [X]"). Demande-lui une question piège pour te tester.
+6. DÉCLIC ET ÉVALUATION INVERSÉE : Si l'explication de l'utilisateur est claire et qu'il a corrigé ton erreur, montre que tu as compris en reformulant grossièrement avec ses mots. Valorise sa pédagogie ("Ton exemple m'a beaucoup aidé !"). Enfin, demande-lui de te poser une question piège pour vérifier que tu as bien retenu sa leçon.
 """
         else:
             prompt_systeme += """
 # POSTURE TUTEUR COGNITIF
-Ton but : Transformer l'élève en constructeur actif.
+Ton but est de transformer l'élève en constructeur actif (Processus SOI : Sélectionner, Organiser, Intégrer). Ne donne jamais de résumé tout fait.
 MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente si non précisée) :
-1. Auto-explication : Fais justifier les étapes. Refuse l'argument d'autorité.
-2. Résumé avec ses mots : Refuse la paraphrase.
-3. Détection d'erreurs : Génère un cas contenant une erreur spécifique à analyser.
+1. Auto-explication : Fais justifier les étapes ("Pourquoi cette étape est-elle justifiée ?"). Refuse l'argument d'autorité ("c'est la règle").
+2. Résumé avec ses mots : Refuse toute paraphrase ou copie verbatim. Exige un vocabulaire propre.
+3. Détection d'erreurs : Génère un cas ou une explication contenant une erreur spécifique à analyser.
 """
         if niveau_eleve == "Novice" and strategie_generative != "Effet_Protege":
             prompt_systeme += """
 # ÉCHAFAUDAGE NOVICE
-- Consignes très structurées : Impose 3 à 5 mots-clés OBLIGATOIRES du cours.
-- Support : Fournis des solutions partielles.
-- Détection d'erreurs : Indique précisément OÙ se trouve l'erreur, l'élève l'explique.
+Apporte un guidage fort pour éviter la surcharge cognitive :
+- Consignes très structurées : Impose une liste de 3 à 5 mots-clés essentiels à inclure OBLIGATOIREMENT.
+- Support : Fournis des solutions partielles (schémas à compléter).
+- En mode "Détection d'erreurs" : Indique précisément OÙ se trouve l'erreur, l'élève doit seulement l'expliquer.
 """
         elif niveau_eleve != "Novice" and strategie_generative != "Effet_Protege":
             prompt_systeme += """
 # ÉCHAFAUDAGE AVANCÉ
-- Consignes ouvertes : Pose des questions larges SANS fournir de mots-clés.
-- Détection d'erreurs : L'élève doit chercher, identifier ET expliquer l'erreur seul.
+Utilise des consignes ouvertes pour maximiser l'effort cognitif :
+- Pose des questions larges ("Explique en détail", "Que manque-t-il dans ce raisonnement ?") SANS fournir de mots-clés.
+- En mode "Détection d'erreurs" : Laisse l'élève chercher, identifier ET expliquer l'erreur lui-même.
 """
 
     return prompt_systeme
+
 # ==========================================
 # FONCTIONS TECHNIQUES & SÉCURITÉ
 # ==========================================
 def initialiser_modele(api_key, niveau, objectif, strategie):
     genai.configure(api_key=api_key)
     instructions = generer_prompt_systeme(niveau, objectif, strategie)
+    # Application stricte du modèle requis : Gemini 3 Flash Preview
     return genai.GenerativeModel(
         model_name="gemini-3-flash-preview",
         system_instruction=instructions
@@ -287,7 +296,6 @@ def generer_contexte_optimise(nouvel_input):
         
     parts_user = []
     
-    # Prise en compte du fichier OU du texte manuel
     if st.session_state.gemini_file_name:
         parts_user.append(genai.get_file(st.session_state.gemini_file_name))
     elif st.session_state.texte_manuel:
@@ -322,7 +330,6 @@ with st.sidebar:
     niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
     objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
     
-    # Traduction propre pour l'UI sans casser le code derrière
     strat_display = "Classique"
     strategie_generative_val = "Classique"
     
@@ -337,17 +344,20 @@ with st.sidebar:
 
     st.divider()
     
-    # Choix entre PDF et Saisie manuelle
+    # Bouton d'activation du clavier mathématique
+    st.session_state.math_mode = st.toggle("🔢 Activer le clavier mathématique", value=st.session_state.math_mode, disabled=session_en_cours)
+    
+    st.divider()
+    
     source_type = st.radio("Source du cours :", ["Fichier PDF", "Texte libre"], disabled=session_en_cours)
     
     if source_type == "Fichier PDF":
         uploaded_file = st.file_uploader("Charge ton cours (PDF)", type=["pdf"], disabled=session_en_cours)
         txt_input = None
     else:
-        txt_input = st.text_area("Colle ton texte de cours ici :", height=200, disabled=session_en_cours, placeholder="Ex: La mitochondrie est l'organite responsable de la respiration cellulaire...")
+        txt_input = st.text_area("Colle ton texte de cours ici :", height=200, disabled=session_en_cours, placeholder="Ex: La mitochondrie est...")
         uploaded_file = None
     
-    # Bouton de démarrage dynamique
     pret_a_demarrer = uploaded_file is not None or (txt_input is not None and len(txt_input.strip()) > 10)
     
     if st.button("🚀 Démarrer la session", disabled=session_en_cours or not pret_a_demarrer):
@@ -383,6 +393,7 @@ with st.sidebar:
 if st.session_state.session_active:
     modele = initialiser_modele(st.session_state.api_key, st.session_state.niveau, st.session_state.objectif, st.session_state.strategie)
     
+    # Affichage de l'historique
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -396,31 +407,48 @@ if st.session_state.session_active:
                 reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
                 st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
-    # Boucle d'interaction
-    if prompt := st.chat_input("Écris ta réponse ici..."):
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    # --- ZONE DE SAISIE AVEC OPTION MATHLIVE ---
+    # Container pour lier visuellement l'éditeur et le champ texte
+    with st.container():
+        latex_input = ""
         
-        with st.chat_message("model"):
-            with st.spinner("Analyse de ta réponse..."):
-                contexte = generer_contexte_optimise(prompt)
-                reponse_stream = modele.generate_content(contexte, stream=True)
-                
-                # Gestion sécurisée du streaming
-                reponse_complete = ""
-                try:
-                    reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
-                except Exception as e:
-                    # Fallback si le stream échoue
-                    reponse_complete = reponse_stream.text
-                    st.markdown(reponse_complete)
+        # Affichage conditionnel de l'éditeur WYSIWYG
+        if st.session_state.math_mode:
+            st.caption("📝 1. Saisis ton calcul avec le clavier mathématique :")
+            # Le composant MathLive renvoie le code LaTeX de l'équation tapée
+            latex_input = st_mathlive(value="", key=f"math_editor_{len(st.session_state.messages)}")
+            
+            if latex_input:
+                # Feedback visuel pour montrer à l'élève ce que l'IA va lire
+                st.latex(latex_input)
+
+        # Champ de texte classique pour déclencher l'envoi
+        if prompt := st.chat_input("💬 2. Écris ton explication ici puis appuie sur Entrée pour envoyer..."):
+            
+            message_complet = prompt
+            
+            # Assemblage de l'équation et de l'explication si le mode est actif
+            if st.session_state.math_mode and latex_input:
+                message_complet = f"{prompt}\n\n**Formule saisie :** ${latex_input}$"
+            
+            with st.chat_message("user"):
+                st.markdown(message_complet)
+            st.session_state.messages.append({"role": "user", "content": message_complet})
+            
+            with st.chat_message("model"):
+                with st.spinner("Analyse de ta réponse..."):
+                    contexte = generer_contexte_optimise(message_complet)
+                    reponse_stream = modele.generate_content(contexte, stream=True)
                     
-        st.session_state.messages.append({"role": "model", "content": reponse_complete})
+                    reponse_complete = ""
+                    try:
+                        reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
+                    except Exception as e:
+                        reponse_complete = reponse_stream.text
+                        st.markdown(reponse_complete)
+                        
+            st.session_state.messages.append({"role": "model", "content": reponse_complete})
+            st.rerun()
 
 else:
     st.info("👈 Choisis tes paramètres et donne-moi ton cours pour commencer !")
-
-
-
-
