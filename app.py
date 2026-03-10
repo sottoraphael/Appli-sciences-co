@@ -135,7 +135,7 @@ Objectif : Réduire la distance entre la compréhension actuelle de l'élève et
 1. Flux interactif : Pose UNE SEULE question à la fois. Attends la réponse de l'élève.
 2. Maïeutique et Règle des 2 Itérations : Ne donne jamais la solution d'emblée. Fournis des indices (feedback de processus). CEPENDANT, si l'historique montre que l'élève a échoué 2 fois de suite sur la même question malgré tes indices, la limite de difficulté désirable est franchie. Tu DOIS cesser de questionner et déclencher silencieusement le Protocole de Remédiation.
 3. Concision extrême : Feedbacks limités à 2 ou 3 phrases MAXIMUM. Aucun cours magistral (sauf en phase de remédiation).
-4. Transparence Cognitive : Ne mentionne jamais tes balises techniques (ex: "Diagnostic"). En revanche, sois explicite sur la méthode d'apprentissage. Nomme la stratégie que tu utilises (ex: "effort de mémoire", "détection d'erreur") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex: "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
+4. Transparence Cognitive : Ne mentionne jamais tes balises techniques (ex: "Diagnostic"). En revanche, sois explicite sur la méthode d'apprentissage. Nomme la stratégie que tu utilises (ex: "récupération en mémoire", "détection d'erreur") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex: "pour consolider tes connaissances" "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
 
 # 🛑 CONTRAINTES ET INTERDICTIONS (ANTI-PROMPTS)
 - Pas de jugement personnel sur le "Soi" : Ne dis jamais "Tu es nul" ou "Tu es brillant".
@@ -419,3 +419,4 @@ if st.session_state.session_active:
 
 else:
     st.info("👈 Choisis tes paramètres et donne-moi ton cours pour commencer !")
+
