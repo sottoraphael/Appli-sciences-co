@@ -1,9 +1,8 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import google.generativeai as genai
-import tempfile
+import PyPDF2
 import time
-import os
 
 # ==========================================
 # CONFIGURATION DE LA PAGE & CSS
@@ -19,7 +18,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-MAX_HISTORIQUE_MESSAGES = 4 
+MAX_HISTORIQUE_MESSAGES = 6 # Légèrement augmenté pour assurer le suivi du raisonnement
 
 # ==========================================
 # GESTION DE L'ÉTAT DE SESSION (State)
@@ -28,10 +27,8 @@ if "session_active" not in st.session_state:
     st.session_state.session_active = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "gemini_file_name" not in st.session_state:
-    st.session_state.gemini_file_name = None
-if "texte_manuel" not in st.session_state:
-    st.session_state.texte_manuel = ""
+if "texte_cours_integral" not in st.session_state:
+    st.session_state.texte_cours_integral = ""
 if "tutoriel_vu" not in st.session_state:
     st.session_state.tutoriel_vu = False
 
@@ -66,19 +63,15 @@ def afficher_tutoriel():
 # ==========================================
 # --- DIALOGUE BILAN FINAL & WOOCLAP ---
 # ==========================================
-# Le paramètre width="large" est crucial pour laisser la place à l'iframe Wooclap
 @st.dialog("📈 Ton Bilan de Révision", width="large")
 def afficher_bilan():
     if len(st.session_state.messages) > 1:
         with st.spinner("Analyse métacognitive en cours..."):
             historique_complet = []
             
-            # Gestion de la source (PDF ou Texte)
-            if st.session_state.gemini_file_name:
-                g_file = genai.get_file(st.session_state.gemini_file_name)
-                historique_complet.extend([{"role": "user", "parts": [g_file, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
-            elif st.session_state.texte_manuel:
-                historique_complet.extend([{"role": "user", "parts": [f"Voici mon texte de cours :\n{st.session_state.texte_manuel}"]}, {"role": "model", "parts": ["Compris."]}])
+            # Injection de la base de connaissances pour la génération du bilan
+            if st.session_state.texte_cours_integral:
+                historique_complet.extend([{"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]}, {"role": "model", "parts": ["Compris."]}])
             
             for msg in st.session_state.messages:
                 role = "user" if msg["role"] == "user" else "model"
@@ -109,10 +102,7 @@ def afficher_bilan():
                 st.markdown("### 📊 Évaluation de l'outil")
                 st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
                 
-                # Code exact fourni dans la consigne
                 iframe_wooclap = """<iframe allowfullscreen frameborder="0" height="100%" mozallowfullscreen src="https://app.wooclap.com/FBXMBG/questionnaires/69ad313cc7cb13027e159133" style="min-height: 550px; min-width: 300px" width="100%"></iframe>"""
-                
-                # Appel du composant HTML de Streamlit pour rendre l'iframe
                 components.html(iframe_wooclap, height=580)
                 
                 st.divider()
@@ -120,7 +110,7 @@ def afficher_bilan():
                 if st.button("🔄 J'ai terminé, recommencer une nouvelle session", type="primary"):
                     st.session_state.session_active = False
                     st.session_state.messages = []
-                    st.session_state.texte_manuel = ""
+                    st.session_state.texte_cours_integral = ""
                     st.rerun()
             except Exception as e:
                 st.error(f"Impossible de générer le bilan pour le moment : {e}")
@@ -133,14 +123,19 @@ def afficher_bilan():
 def generer_prompt_systeme(niveau_eleve, objectif_eleve, strategie_generative=None):
     prompt_systeme = """# RÔLE ET MISSION
 Tu es un expert en ingénierie pédagogique cognitive et spécialiste EdTech.
-Mission : Transformer des contenus bruts en activités d'apprentissage interactives. Base-toi EXCLUSIVEMENT sur le cours fourni pour le fond.
-Objectif : Réduire la distance entre la compréhension actuelle de l'élève et la cible pédagogique, sans provoquer de surcharge cognitive.
+Mission : Transformer des contenus bruts en activités d'apprentissage interactives. Base-toi EXCLUSIVEMENT sur la "BASE DE CONNAISSANCES DU COURS" fournie au début de la conversation pour le fond.
+Objectif : Réduire la distance entre la compréhension actuelle de l'élève et la cible pédagogique, tout en développant sa métacognition.
+
+# ➗ GESTION DES NOTATIONS SCIENTIFIQUES ET MATHÉMATIQUES
+- L'élève ne dispose pas de clavier mathématique. Il saisira ses formules en texte brut (ex: "racine de x", "3/4", "x au carre").
+- Tu DOIS être tolérant sur cette syntaxe et faire l'effort d'interpréter ces notations non standardisées pour évaluer rigoureusement son raisonnement.
+- Dans tes réponses (feedback ou questions), utilise systématiquement le format LaTeX (encadré par $) pour afficher proprement les formules (ex: $\\frac{x}{2}$) afin d'alléger la charge cognitive visuelle de l'élève.
 
 # DIRECTIVES DE GUIDAGE (STRICTES)
 1. Flux interactif : Pose UNE SEULE question à la fois. Attends la réponse de l'élève.
 2. Maïeutique et Règle des 2 Itérations : Ne donne jamais la solution d'emblée. Fournis des indices (feedback de processus). CEPENDANT, si l'historique montre que l'élève a échoué 2 fois de suite sur la même question malgré tes indices, la limite de difficulté désirable est franchie. Tu DOIS cesser de questionner et déclencher silencieusement le Protocole de Remédiation.
 3. Concision extrême : Feedbacks limités à 2 ou 3 phrases MAXIMUM. Aucun cours magistral (sauf en phase de remédiation).
-4. Fluidité narrative : Ne mentionne jamais explicitement la structure pédagogique que tu utilises (ne dis pas "Constat :" ou "Diagnostic :"). Ton texte visible doit être fluide, conversationnel et naturel, comme un véritable tuteur humain.
+4. Transparence Cognitive : Ne mentionne jamais tes balises techniques (ex: "Diagnostic"). En revanche, sois explicite sur la méthode d'apprentissage. Nomme la stratégie que tu utilises (ex: "effort de mémoire", "détection d'erreur") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex: "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
 
 # 🛑 CONTRAINTES ET INTERDICTIONS (ANTI-PROMPTS)
 - Pas de jugement personnel sur le "Soi" : Ne dis jamais "Tu es nul" ou "Tu es brillant".
@@ -156,10 +151,10 @@ Intègre ces 3 étapes de manière fluide :
 2. Diagnostic : Identifie précisément la règle ou l'étape bloquante/réussie (Haute Info).
 3. Levier stratégique : Indique une méthode cognitive pour déduire la réponse (analogie, décomposition, indice logique basé sur le cours), SANS donner la réponse finale. Interdiction stricte de dire simplement "relis le cours". Pousse l'élève à utiliser sa réflexion.
 
-Structure 2 : Feedback d'Autorégulation
+Structure 2 : Feedback d'Autorégulation et Monitorage (Métacognition)
 Intègre ces 3 étapes de manière fluide :
 1. Effet miroir : Décris la réponse de l'élève de manière factuelle, sans jugement.
-2. Activation radar : Interroge son système de détection pour le faire réfléchir sur son action.
+2. Activation radar : Interroge son système de détection pour le faire réfléchir sur son action OU demande-lui d'évaluer l'efficacité de la méthode qu'il vient d'utiliser.
 3. Ouverture : Pousse-le à la décision ou à l'action corrective sans donner la réponse.
 
 Structure 3 : Protocole de Remédiation (À déclencher EXCLUSIVEMENT après 2 échecs consécutifs)
@@ -169,8 +164,8 @@ Structure 3 : Protocole de Remédiation (À déclencher EXCLUSIVEMENT après 2 �
 # EXEMPLES DE RÉPONSES ATTENDUES (FEW-SHOT PROMPTING)
 Voici comment tu dois formuler tes réponses pour qu'elles soient naturelles et intègrent les étapes sans les nommer :
 
-Exemple de Feedback de Processus attendu :
-"Tu as bien identifié que la photosynthèse nécessite de la lumière. Cependant, tu as oublié un élément gazeux indispensable dans ton équation. Pour le retrouver, pense à ce que les êtres humains expirent lors de la respiration : la plante utilise précisément ce gaz de l'air pour se nourrir. Quel est-il ?"
+Exemple de Feedback de Processus avec Transparence Cognitive :
+"Tu as bien identifié que la photosynthèse nécessite de la lumière. Cependant, tu as oublié un élément gazeux indispensable dans ton équation. Pour forcer ton cerveau à faire le lien, pense à ce que les êtres humains expirent lors de la respiration : la plante utilise précisément ce gaz de l'air pour se nourrir. Quel est-il ?"
 
 Exemple de Feedback d'Autorégulation attendu :
 "Tu as écrit que la Révolution a commencé en 1792. Regarde attentivement la chronologie dans ton document. Quel événement majeur de 1789 marque réellement le début de cette période ?"
@@ -258,7 +253,7 @@ MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente si non précisée) :
     return prompt_systeme
 
 # ==========================================
-# FONCTIONS TECHNIQUES & SÉCURITÉ
+# FONCTIONS TECHNIQUES & EXTRACTION PDF
 # ==========================================
 def initialiser_modele(api_key, niveau, objectif, strategie):
     genai.configure(api_key=api_key)
@@ -268,36 +263,37 @@ def initialiser_modele(api_key, niveau, objectif, strategie):
         system_instruction=instructions
     )
 
-def uploader_fichier_google(uploaded_file):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        tmp.write(uploaded_file.getvalue())
-        tmp_path = tmp.name
-
-    with st.spinner("⏳ Je lis ton cours pour préparer les questions..."):
-        g_file = genai.upload_file(tmp_path)
-        while g_file.state.name == "PROCESSING":
-            time.sleep(1)
-            g_file = genai.get_file(g_file.name)
-            
-    os.remove(tmp_path)
-    return g_file
+def extraire_texte_pdf(uploaded_file):
+    """Extrait l'intégralité du texte d'un fichier PDF page par page."""
+    texte_complet = ""
+    try:
+        pdf_reader = PyPDF2.PdfReader(uploaded_file)
+        nb_pages = len(pdf_reader.pages)
+        for num_page in range(nb_pages):
+            page = pdf_reader.pages[num_page]
+            texte_page = page.extract_text()
+            if texte_page:
+                texte_complet += f"\n--- Page {num_page + 1} ---\n{texte_page}"
+        return texte_complet
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture du PDF : {e}")
+        return None
 
 def generer_contexte_optimise(nouvel_input):
     contents = []
+    
+    # Injection systématique de la base de connaissances (cours intégral)
+    if st.session_state.texte_cours_integral:
+        contents.append({"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]})
+        contents.append({"role": "model", "parts": ["J'ai bien mémorisé l'intégralité de la base de connaissances. Je suis prêt à formuler mes questions en me basant strictement sur ce contenu."]})
+
+    # Ajout de l'historique conversationnel récent
     historique_recent = st.session_state.messages[-MAX_HISTORIQUE_MESSAGES:]
     for msg in historique_recent:
         contents.append({"role": msg["role"], "parts": [msg["content"]]})
         
-    parts_user = []
-    
-    # Prise en compte du fichier OU du texte manuel
-    if st.session_state.gemini_file_name:
-        parts_user.append(genai.get_file(st.session_state.gemini_file_name))
-    elif st.session_state.texte_manuel:
-        parts_user.append(f"Voici mon texte de cours sur lequel tu dois me questionner :\n{st.session_state.texte_manuel}")
-        
-    parts_user.append(nouvel_input)
-    contents.append({"role": "user", "parts": parts_user})
+    # Ajout de la nouvelle entrée de l'élève
+    contents.append({"role": "user", "parts": [nouvel_input]})
     return contents
 
 def extraire_texte_stream(reponse):
@@ -325,7 +321,6 @@ with st.sidebar:
     niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
     objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
     
-    # Traduction propre pour l'UI sans casser le code derrière
     strat_display = "Classique"
     strategie_generative_val = "Classique"
     
@@ -340,7 +335,6 @@ with st.sidebar:
 
     st.divider()
     
-    # Choix entre PDF et Saisie manuelle
     source_type = st.radio("Source du cours :", ["Fichier PDF", "Texte libre"], disabled=session_en_cours)
     
     if source_type == "Fichier PDF":
@@ -350,7 +344,6 @@ with st.sidebar:
         txt_input = st.text_area("Colle ton texte de cours ici :", height=200, disabled=session_en_cours, placeholder="Ex: La mitochondrie est l'organite responsable de la respiration cellulaire...")
         uploaded_file = None
     
-    # Bouton de démarrage dynamique
     pret_a_demarrer = uploaded_file is not None or (txt_input is not None and len(txt_input.strip()) > 10)
     
     if st.button("🚀 Démarrer la session", disabled=session_en_cours or not pret_a_demarrer):
@@ -358,13 +351,16 @@ with st.sidebar:
             api_key = st.secrets["GOOGLE_API_KEY"]
             genai.configure(api_key=api_key)
             
+            # Traitement dynamique du contenu textuel au démarrage
             if uploaded_file:
-                fichier_gemini = uploader_fichier_google(uploaded_file)
-                st.session_state.gemini_file_name = fichier_gemini.name
-                st.session_state.texte_manuel = ""
+                with st.spinner("⏳ Extraction du contenu complet de ton document..."):
+                    texte_extrait = extraire_texte_pdf(uploaded_file)
+                    if texte_extrait:
+                        st.session_state.texte_cours_integral = texte_extrait
+                    else:
+                        st.stop()
             else:
-                st.session_state.texte_manuel = txt_input
-                st.session_state.gemini_file_name = None
+                st.session_state.texte_cours_integral = txt_input
             
             st.session_state.api_key = api_key
             st.session_state.niveau = niveau_eleve
