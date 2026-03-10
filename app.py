@@ -1,7 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import google.generativeai as genai
-from st_mathlive import mathfield 
 import tempfile
 import time
 import os
@@ -35,8 +34,6 @@ if "texte_manuel" not in st.session_state:
     st.session_state.texte_manuel = ""
 if "tutoriel_vu" not in st.session_state:
     st.session_state.tutoriel_vu = False
-if "math_mode" not in st.session_state:
-    st.session_state.math_mode = False 
 
 # ==========================================
 # --- TUTORIEL D'ACCUEIL ---
@@ -69,12 +66,14 @@ def afficher_tutoriel():
 # ==========================================
 # --- DIALOGUE BILAN FINAL & WOOCLAP ---
 # ==========================================
+# Le paramètre width="large" est crucial pour laisser la place à l'iframe Wooclap
 @st.dialog("📈 Ton Bilan de Révision", width="large")
 def afficher_bilan():
     if len(st.session_state.messages) > 1:
         with st.spinner("Analyse métacognitive en cours..."):
             historique_complet = []
             
+            # Gestion de la source (PDF ou Texte)
             if st.session_state.gemini_file_name:
                 g_file = genai.get_file(st.session_state.gemini_file_name)
                 historique_complet.extend([{"role": "user", "parts": [g_file, "Voici mon document de cours."]}, {"role": "model", "parts": ["Compris."]}])
@@ -87,10 +86,12 @@ def afficher_bilan():
                 
             instruction_metacognitive = """
             Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
-            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point.
+            
+            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
+            
             Structure obligatoirement ton bilan ainsi :
-            1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir.
-            2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois.
+            1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir (très bref).
+            2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois (1 phrase).
             3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire donne l'illusion de savoir (biais de fluence) et qu'il faut attendre un peu avant de se retester.
             4. 📝 Prochaine étape : Suggère en 1 courte phrase de noter ces points dans son carnet de progrès.
             """
@@ -104,10 +105,14 @@ def afficher_bilan():
                 
                 st.divider()
                 
+                # --- INTÉGRATION STRICTE DE L'IFRAME WOOCLAP ---
                 st.markdown("### 📊 Évaluation de l'outil")
                 st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
                 
+                # Code exact fourni dans la consigne
                 iframe_wooclap = """<iframe allowfullscreen frameborder="0" height="100%" mozallowfullscreen src="https://app.wooclap.com/FBXMBG/questionnaires/69ad313cc7cb13027e159133" style="min-height: 550px; min-width: 300px" width="100%"></iframe>"""
+                
+                # Appel du composant HTML de Streamlit pour rendre l'iframe
                 components.html(iframe_wooclap, height=580)
                 
                 st.divider()
@@ -259,7 +264,7 @@ def initialiser_modele(api_key, niveau, objectif, strategie):
     genai.configure(api_key=api_key)
     instructions = generer_prompt_systeme(niveau, objectif, strategie)
     return genai.GenerativeModel(
-        model_name="gemini-3-flash-preview", 
+        model_name="gemini-3-flash-preview",
         system_instruction=instructions
     )
 
@@ -285,6 +290,7 @@ def generer_contexte_optimise(nouvel_input):
         
     parts_user = []
     
+    # Prise en compte du fichier OU du texte manuel
     if st.session_state.gemini_file_name:
         parts_user.append(genai.get_file(st.session_state.gemini_file_name))
     elif st.session_state.texte_manuel:
@@ -319,6 +325,7 @@ with st.sidebar:
     niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
     objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
     
+    # Traduction propre pour l'UI sans casser le code derrière
     strat_display = "Classique"
     strategie_generative_val = "Classique"
     
@@ -333,19 +340,17 @@ with st.sidebar:
 
     st.divider()
     
-    st.session_state.math_mode = st.toggle("🔢 Activer le clavier mathématique", value=st.session_state.math_mode, disabled=session_en_cours)
-    
-    st.divider()
-    
+    # Choix entre PDF et Saisie manuelle
     source_type = st.radio("Source du cours :", ["Fichier PDF", "Texte libre"], disabled=session_en_cours)
     
     if source_type == "Fichier PDF":
         uploaded_file = st.file_uploader("Charge ton cours (PDF)", type=["pdf"], disabled=session_en_cours)
         txt_input = None
     else:
-        txt_input = st.text_area("Colle ton texte de cours ici :", height=200, disabled=session_en_cours, placeholder="Ex: La mitochondrie est...")
+        txt_input = st.text_area("Colle ton texte de cours ici :", height=200, disabled=session_en_cours, placeholder="Ex: La mitochondrie est l'organite responsable de la respiration cellulaire...")
         uploaded_file = None
     
+    # Bouton de démarrage dynamique
     pret_a_demarrer = uploaded_file is not None or (txt_input is not None and len(txt_input.strip()) > 10)
     
     if st.button("🚀 Démarrer la session", disabled=session_en_cours or not pret_a_demarrer):
@@ -385,6 +390,7 @@ if st.session_state.session_active:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
+    # Amorçage (1ère question)
     if len(st.session_state.messages) == 0:
         with st.chat_message("model"):
             with st.spinner("Je prépare l'exercice..."):
@@ -393,50 +399,27 @@ if st.session_state.session_active:
                 reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
                 st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
-    with st.container():
-        latex_input = ""
+    # Boucle d'interaction
+    if prompt := st.chat_input("Écris ta réponse ici..."):
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
         
-        if st.session_state.math_mode:
-            st.caption("📝 1. Saisis ton calcul avec le clavier mathématique :")
-            try:
-                latex_input, mathml_input = mathfield(
-                    title="Équation",
-                    value=r"",
-                    key=f"math_editor_{len(st.session_state.messages)}"
-                )
-            except Exception as e:
-                st.error("L'éditeur mathématique est temporairement indisponible. Veuillez utiliser le texte simple.")
-                latex_input = ""
-            
-            if latex_input:
-                st.latex(latex_input)
-
-        if prompt := st.chat_input("💬 2. Écris ton explication ici puis appuie sur Entrée pour envoyer..."):
-            
-            message_complet = prompt
-            
-            if st.session_state.math_mode and latex_input:
-                message_complet = f"{prompt}\n\n**Formule saisie :** ${latex_input}$"
-            
-            with st.chat_message("user"):
-                st.markdown(message_complet)
-            st.session_state.messages.append({"role": "user", "content": message_complet})
-            
-            with st.chat_message("model"):
-                with st.spinner("Analyse de ta réponse..."):
-                    contexte = generer_contexte_optimise(message_complet)
-                    reponse_stream = modele.generate_content(contexte, stream=True)
+        with st.chat_message("model"):
+            with st.spinner("Analyse de ta réponse..."):
+                contexte = generer_contexte_optimise(prompt)
+                reponse_stream = modele.generate_content(contexte, stream=True)
+                
+                # Gestion sécurisée du streaming
+                reponse_complete = ""
+                try:
+                    reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
+                except Exception as e:
+                    # Fallback si le stream échoue
+                    reponse_complete = reponse_stream.text
+                    st.markdown(reponse_complete)
                     
-                    reponse_complete = ""
-                    try:
-                        reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
-                    except Exception as e:
-                        reponse_complete = reponse_stream.text
-                        st.markdown(reponse_complete)
-                        
-            st.session_state.messages.append({"role": "model", "content": reponse_complete})
-            st.rerun()
+        st.session_state.messages.append({"role": "model", "content": reponse_complete})
 
 else:
     st.info("👈 Choisis tes paramètres et donne-moi ton cours pour commencer !")
-
