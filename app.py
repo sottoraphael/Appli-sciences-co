@@ -18,7 +18,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-MAX_HISTORIQUE_MESSAGES = 6 # Légèrement augmenté pour assurer le suivi du raisonnement
+MAX_HISTORIQUE_MESSAGES = 6
 
 # ==========================================
 # GESTION DE L'ÉTAT DE SESSION (State)
@@ -69,26 +69,34 @@ def afficher_bilan():
         with st.spinner("Analyse métacognitive en cours..."):
             historique_complet = []
             
-            # Injection de la base de connaissances pour la génération du bilan
             if st.session_state.texte_cours_integral:
-                historique_complet.extend([{"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]}, {"role": "model", "parts": ["Compris."]}])
+                historique_complet.extend([{"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]}, {"role": "model", "parts": ["Compris."] }])
             
             for msg in st.session_state.messages:
                 role = "user" if msg["role"] == "user" else "model"
                 historique_complet.append({"role": role, "parts": [msg["content"]]})
                 
-            instruction_metacognitive = """
-            Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
-            
+            # --- DÉBUT DU BLOC DE BILAN MÉTACOGNITIF DYNAMIQUE ---
+            # 1. On prépare la base commune (Acquis et Erreurs)
+            instruction_metacognitive = """Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
+
             CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
-            
+
             Structure obligatoirement ton bilan ainsi :
             1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir (très bref).
             2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois (1 phrase).
-            3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire donne l'illusion de savoir (biais de fluence) et qu'il faut attendre un peu avant de se retester.
-            4. 📝 Prochaine étape : Suggère en 1 courte phrase de noter ces points dans son carnet de progrès.
             """
-            
+
+            # 2. On ajoute les conseils spécifiques selon le mode choisi (Le piège et l'étape "Maison")
+            if "Mode A" in st.session_state.objectif:
+                instruction_metacognitive += """3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire le cours donne l'illusion de savoir (biais de fluence) et que seul l'effort de mémoire compte.
+            4. 📝 Prochaine étape : Suggère en 1 courte phrase de faire à la maison exactement comme aujourd'hui : cacher son cours et forcer son cerveau à retrouver les informations sur une feuille blanche.
+            """
+            else:
+                instruction_metacognitive += """3. ⏳ Le piège de la correction : Rappelle en 1 courte phrase que lire une correction donne l'illusion d'avoir compris. La vraie compréhension, c'est savoir l'expliquer soi-même.
+            4. 📝 Prochaine étape : Suggère en 1 courte phrase de faire à la maison exactement comme aujourd'hui : reprendre un exercice et expliquer la méthode à voix haute comme à un camarade, ou chercher les erreurs.
+            """
+
             model_bilan = genai.GenerativeModel("gemini-3-flash-preview", system_instruction=instruction_metacognitive)
             chat_bilan = model_bilan.start_chat(history=historique_complet)
             
@@ -98,7 +106,6 @@ def afficher_bilan():
                 
                 st.divider()
                 
-                # --- INTÉGRATION STRICTE DE L'IFRAME WOOCLAP ---
                 st.markdown("### 📊 Évaluation de l'outil")
                 st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
                 
@@ -135,11 +142,14 @@ Objectif : Réduire la distance entre la compréhension actuelle de l'élève et
 1. Flux interactif : Pose UNE SEULE question à la fois. Attends la réponse de l'élève.
 2. Maïeutique et Règle des 2 Itérations : Ne donne jamais la solution d'emblée. Fournis des indices (feedback de processus). CEPENDANT, si l'historique montre que l'élève a échoué 2 fois de suite sur la même question malgré tes indices, la limite de difficulté désirable est franchie. Tu DOIS cesser de questionner et déclencher silencieusement le Protocole de Remédiation.
 3. Concision extrême : Feedbacks limités à 2 ou 3 phrases MAXIMUM. Aucun cours magistral (sauf en phase de remédiation).
-4. Transparence Cognitive : Ne mentionne jamais tes balises techniques (ex: "Diagnostic"). En revanche, sois explicite sur la méthode d'apprentissage. Nomme la stratégie que tu utilises (ex: "récupération en mémoire", "détection d'erreur") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex: "pour consolider tes connaissances" "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
+4. Transparence Cognitive : Ne mentionne jamais tes balises techniques (ex: ne dis pas "Diagnostic :"). En revanche, sois explicite sur la méthode d'apprentissage en utilisant un vocabulaire simple, adapté à un élève. Nomme la stratégie que tu utilises (ex: "récupération en mémoire", "détection d'erreur", "démonstration") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex:"pour mémoriser plus longtemps", "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
+5. Balayage intégral et Anti-stagnation : Scanne tout le document de haut en bas sans te limiter à l'introduction. À chaque nouvelle question, avance dans le cours. Passe au concept suivant dès que l'objectif d'apprentissage de la question est atteint (en Mode Compréhension, cela peut impliquer de demander à l'élève de justifier une réponse juste avant d'avancer), OU s'il échoue à la tâche partielle du Protocole de Remédiation. Dans ce dernier cas d'échec, donne-lui simplement la réponse finale avec bienveillance, et passe obligatoirement à la suite. Ne le bloque jamais indéfiniment.
+6. Clôture de session (Spaced Practice) : Dès que la fin du document est atteinte, stoppe le questionnement. Félicite l'élève pour son effort cognitif, et invite-le explicitement à cliquer sur le bouton "🛑 Terminer et voir ma synthèse" situé dans le panneau latéral pour découvrir son bilan, puis à fermer l'application pour y revenir dans quelques jours.
 
 # 🛑 CONTRAINTES ET INTERDICTIONS (ANTI-PROMPTS)
 - Pas de jugement personnel sur le "Soi" : Ne dis jamais "Tu es nul" ou "Tu es brillant".
-- Pas de feedback stéréotypé vide : Interdiction de dire juste "C'est juste/faux" sans explication factuelle.
+- Pas de feedback stéréotypé vide ou immérité : Interdiction de dire juste "C'est juste/faux" sans explication factuelle, et évite les "Bravo !" vagues.
+- Pas de comparaison sociale : Ne compare jamais l'élève aux autres.
 - ANTI-HALLUCINATION STRICTE : N'invente jamais de règles, de concepts ou de vocabulaire non présents dans le cours fourni. Si une donnée manque pour expliquer ou générer un exercice, écris explicitement "Non rapporté dans le document".
 
 # STRUCTURES D'INTERVENTION OBLIGATOIRES
@@ -158,7 +168,7 @@ Intègre ces 3 étapes de manière fluide :
 3. Ouverture : Pousse-le à la décision ou à l'action corrective sans donner la réponse.
 
 Structure 3 : Protocole de Remédiation (À déclencher EXCLUSIVEMENT après 2 échecs consécutifs)
-1. Modelage (Problème résolu) : Stoppe le questionnement. Donne la bonne réponse exacte à la question bloquante et explique la démarche pas-à-pas en utilisant UNIQUEMENT le vocabulaire du cours.
+1. Démonstration pas-à-pas (Problème résolu) : Stoppe le questionnement. Donne la bonne réponse exacte à la question bloquante et explique la démarche pas-à-pas en utilisant UNIQUEMENT le vocabulaire du cours.
 2. Tâche partielle (Échafaudage) : Relance avec une question isomorphe (même structure logique, mais avec d'autres variables tirées du cours). Fournis le début de la résolution pour que l'élève n'ait qu'à compléter la dernière étape. Si le cours ne permet pas de créer une question isomorphe, simplifie simplement la question initiale.
 
 # EXEMPLES DE RÉPONSES ATTENDUES (FEW-SHOT PROMPTING)
@@ -210,6 +220,7 @@ L'élève possède les bases mais peut faire des étourderies.
 # LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
 - Séquençage : L'élève effectue cet exercice PENDANT l'étude, avec le document sous les yeux (à livre ouvert).
 - Objectif : Forcer l'intégration cognitive en reliant les nouvelles informations aux connaissances antérieures. Ce n'est pas un test de mémorisation.
+- Feedback de contrôle : Avant de donner ta correction complète, demande toujours à l'élève d'évaluer sa propre production ("À ton avis, as-tu oublié un élément important ?").
 """
         if strategie_generative == "Effet_Protege":
             prompt_systeme += """
@@ -259,7 +270,7 @@ def initialiser_modele(api_key, niveau, objectif, strategie):
     genai.configure(api_key=api_key)
     instructions = generer_prompt_systeme(niveau, objectif, strategie)
     return genai.GenerativeModel(
-        model_name="gemini-3-flash-preview",
+        model_name="gemini-3-flash-preview", 
         system_instruction=instructions
     )
 
@@ -419,4 +430,3 @@ if st.session_state.session_active:
 
 else:
     st.info("👈 Choisis tes paramètres et donne-moi ton cours pour commencer !")
-
