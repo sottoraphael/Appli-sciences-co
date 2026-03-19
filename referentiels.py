@@ -1,615 +1,764 @@
-import streamlit as st
-import streamlit.components.v1 as components
-import google.generativeai as genai
-import PyPDF2
-import time
-import json
-import re
-import sys
-import subprocess
-import sympy as sp
-from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
-from pydantic import BaseModel, Field
-import os
+# Ce fichier centralise les programmes officiels extraits d'Eduscol.
+# Il sert de "Loi" (Grounding) pour brider les hallucinations du modèle Albert.
+# Il permet de garantir que l'IA reste dans la Zone Proximale de Développement (ZPD) de l'élève.
 
-# Import direct de votre module Python
-import referentiels 
+REFERENTIEL_COLLEGE = {
+    "Mathématiques": {
+        "6ème": {
+            "notions_cles": [
+                "Utiliser et représenter les grands nombres entiers",
+                "Comprendre et utiliser des fractions simples et des nombres décimaux",
+                "Mettre en œuvre les quatre opérations et le calcul mental dans des situations variées",
+                "Résoudre des problèmes en mobilisant nombres, calcul et organisation de données",
+                "Mesurer et comparer des grandeurs (longueur, masse, durée, aire, volume)",
+                "Décrire et reconnaître des figures planes et des solides usuels",
+                "Se repérer sur une droite graduée et dans le plan",
+                "Utiliser tableaux, graphiques et diagrammes pour organiser des données"
+            ],
+            "vocabulaire_exigible": [
+                "nombre entier", "fraction simple", "nombre décimal",
+                "addition, soustraction, multiplication, division", "calcul mental",
+                "droite graduée", "segment, longueur, périmètre", "aire, volume",
+                "tableau, graphique, diagramme"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "Nombres décimaux relatifs et opérations sur les nombres",
+                "Fractions, nombres rationnels et calcul fractionnaire",
+                "Puissances et notation scientifique",
+                "Divisibilité, nombres premiers et décomposition en facteurs premiers",
+                "Calcul littéral, expressions, distributivité et premières équations du premier degré",
+                "Organisation et gestion de données, indicateurs (moyenne, médiane, étendue)",
+                "Premières notions de probabilités et modélisation simple du hasard",
+                "Grandeurs et mesures : aires, volumes, grandeurs produit et quotient, conversions",
+                "Espace et géométrie : figures usuelles, codages et transformations simples",
+                "Algorithmique et programmation par blocs pour des programmes de calcul ou de tracé"
+            ],
+            "vocabulaire_exigible": [
+                "nombre relatif", "fraction, nombre rationnel", "puissance, notation scientifique",
+                "multiple, diviseur, nombre premier", "expression littérale, distributivité",
+                "équation du premier degré", "moyenne, médiane, étendue",
+                "probabilité, expérience aléatoire, événement", "aire, volume, grandeur produit, grandeur quotient"
+            ],
+            "limites_zpd": [
+                "Pas d'attendu sur les propriétés algébriques générales des racines carrées (manipulations symboliques avancées)",
+                "Pas d'attendu sur les formules générales de produits et quotients de puissances (la mise en œuvre des calculs repose sur la définition des puissances)",
+                "La notion d'arbre de probabilités n'est pas au programme (les dénombrements s'appuient sur des tableaux à double entrée)",
+                "Les définitions ponctuelles formelles des translations, rotations et homothéties ne figurent pas au programme",
+                "Aucune virtuosité calculatoire n'est attendue dans les développements et factorisations",
+                "L’usage systématique de la double distributivité et la résolution d’équations produits au-delà du premier degré ne sont pas prioritaires"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Consolider le calcul avec nombres décimaux relatifs et nombres rationnels",
+                "Approfondir calcul fractionnaire, fractions irréductibles et décomposition en facteurs premiers",
+                "Approfondir puissances (exposants positifs et négatifs) et notation scientifique",
+                "Développer le calcul littéral (développement, factorisation, simplification d’expressions)",
+                "Mettre en équation des problèmes et résoudre des équations du premier degré",
+                "Approfondir statistiques (tableaux, diagrammes, histogrammes, moyenne, médiane, étendue)",
+                "Probabilités simples, fréquences et modélisation de situations aléatoires élémentaires",
+                "Grandeurs et mesures : formules d’aires et de volumes, grandeurs composées",
+                "Espace et géométrie : parallélogrammes, triangles, symétries, translations",
+                "Initiation aux fonctions (tableaux de valeurs, premiers graphiques)"
+            ],
+            "vocabulaire_exigible": [
+                "fraction irréductible", "décomposition en facteurs premiers", "racine carrée (usage numérique)",
+                "puissance de 10", "développement, factorisation", "équation, solution",
+                "fréquence, histogramme", "coefficient de proportionnalité", "fonction (tableau de valeurs, graphique)",
+                "parallélogramme, symétrie centrale, translation"
+            ],
+            "limites_zpd": [
+                "Pas d'attendu sur les propriétés algébriques générales des racines carrées (manipulations symboliques avancées)",
+                "Pas d'attendu sur les formules générales de produits et quotients de puissances (la mise en œuvre des calculs repose sur la définition des puissances)",
+                "La notion d'arbre de probabilités n'est pas au programme (les dénombrements s'appuient sur des tableaux à double entrée)",
+                "Les définitions ponctuelles formelles des translations, rotations et homothéties ne figurent pas au programme",
+                "Aucune virtuosité calculatoire n'est attendue dans les développements et factorisations",
+                "L’usage systématique de la double distributivité et la résolution d’équations produits au-delà du premier degré ne sont pas prioritaires"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Maîtriser les opérations sur nombres relatifs et rationnels (y compris puissances usuelles)",
+                "Utiliser la notation scientifique et estimer des ordres de grandeur",
+                "Maîtriser le calcul littéral pour transformer des expressions et résoudre des équations du premier degré",
+                "Utiliser racine carrée et théorème de Pythagore dans des problèmes de géométrie",
+                "Utiliser proportionnalité, pourcentages et coefficients multiplicateurs dans des situations variées",
+                "Étudier des fonctions linéaires et affines, leurs expressions et représentations graphiques",
+                "Approfondir statistiques (moyenne, médiane, étendue, histogrammes) et probabilités simples",
+                "Calculer avec des grandeurs composées et vérifier la cohérence des unités",
+                "Mettre en œuvre Thalès, triangles semblables et transformations pour résoudre des problèmes",
+                "Écrire, mettre au point et exécuter des programmes simples en algorithmique (boucles, tests, variables)"
+            ],
+            "vocabulaire_exigible": [
+                "racine carrée (usage numérique lié à Pythagore)", "notation scientifique, ordre de grandeur",
+                "identité, expression littérale", "équation du premier degré, équation-produit (cas simples)",
+                "coefficient multiplicateur, taux d’évolution", "fonction linéaire, fonction affine, image, antécédent",
+                "médiane, étendue, histogramme", "théorème de Pythagore, théorème de Thalès",
+                "triangles semblables", "boucle, instruction conditionnelle, variable (en programmation par blocs)"
+            ],
+            "limites_zpd": [
+                "Pas d'attendu sur les propriétés algébriques générales des racines carrées (manipulations symboliques avancées)",
+                "Pas d'attendu sur les formules générales de produits et quotients de puissances (la mise en œuvre des calculs repose sur la définition des puissances)",
+                "La notion d'arbre de probabilités n'est pas au programme (les dénombrements s'appuient sur des tableaux à double entrée)",
+                "Les définitions ponctuelles formelles des translations, rotations et homothéties ne figurent pas au programme",
+                "Aucune virtuosité calculatoire n'est attendue dans les développements et factorisations",
+                "L’usage systématique de la double distributivité et la résolution d’équations produits au-delà du premier degré ne sont pas prioritaires"
+            ]
+        }
+    },
+    "Français": {
+        "6ème": {
+            "notions_cles": [
+                "Comprendre et s’exprimer à l’oral dans des situations variées",
+                "Lire avec fluidité et comprendre des textes littéraires et documentaires",
+                "Écrire régulièrement des textes variés (récits, descriptions, comptes rendus)",
+                "Étudier le fonctionnement de la langue (grammaire, orthographe, lexique)",
+                "Construire une première culture littéraire et artistique commune",
+                "Utiliser le langage oral pour débattre, expliquer, raconter",
+                "Recourir à l’écriture pour réfléchir et pour apprendre"
+            ],
+            "vocabulaire_exigible": [
+                "langage oral, échange, débat", "texte narratif, descriptif",
+                "phrase simple, phrase complexe", "orthographe lexicale, orthographe grammaticale",
+                "verbe, sujet, complément (terminologie de base)", "temps du récit (passé, présent, futur)",
+                "lexique, champ lexical", "texte littéraire, œuvre intégrale", "lecture à voix haute, récitation"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "Comprendre et interpréter des messages et discours oraux complexes",
+                "Lire et interpréter des textes littéraires de genres variés",
+                "Rédiger des écrits organisés en tenant compte du destinataire et de l’intention",
+                "Approfondir l’étude de la langue (phrase complexe, classes et fonctions essentielles)",
+                "Enrichir sa culture littéraire et artistique (repères d’histoire littéraire et culturelle)",
+                "Initier une argumentation plus maîtrisée à l’oral et à l’écrit"
+            ],
+            "vocabulaire_exigible": [
+                "narrateur, point de vue", "implicite, inférence", "paragraphe, connecteur logique",
+                "classes de mots majeures (nom, verbe, adjectif, adverbe)",
+                "complément de phrase, complément du verbe (terminologie usuelle du programme)",
+                "discours direct, discours indirect", "argument, exemple, thèse",
+                "genre narratif, poésie, théâtre"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Contrôler sa compréhension et devenir lecteur autonome de textes complexes",
+                "Produire des écrits argumentatifs, explicatifs ou narratifs structurés",
+                "Analyser le fonctionnement de la phrase complexe et des subordonnées",
+                "Approfondir l’orthographe grammaticale et lexicale dans les écrits",
+                "Consolider une culture littéraire et artistique (dialogue des œuvres et des époques)",
+                "Pratiquer l’oral long (exposé, restitution, lecture expressive)"
+            ],
+            "vocabulaire_exigible": [
+                "proposition subordonnée relative, complétive, circonstancielle (terminologie de base du programme)",
+                "valeurs des temps (imparfait, passé simple, plus-que-parfait, etc.)",
+                "registre de langue", "figure de style simple (comparaison, métaphore, hyperbole)",
+                "cohésion textuelle, anaphore", "paragraphe argumentatif",
+                "champ lexical, connotation", "point de vue critique sur une œuvre"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Comprendre et interpréter des textes et documents complexes, y compris argumentatifs",
+                "Rédiger des textes argumentatifs organisés pour préparer les épreuves du DNB",
+                "Maîtriser les principales notions de grammaire de phrase et de texte",
+                "Stabiliser l’orthographe lexicale et grammaticale dans les écrits scolaires",
+                "Structurer une culture littéraire et artistique de référence pour la fin du collège",
+                "S’exprimer à l’oral de façon maîtrisée (présentation, débat, argumentation)"
+            ],
+            "vocabulaire_exigible": [
+                "thèse, argument, exemple, connecteur logique",
+                "proposition indépendante, coordonnée, subordonnée",
+                "voix active, voix passive", "valeurs modales et temporelles des temps de l’indicatif",
+                "registres (comique, tragique, pathétique, etc. au sens du programme)",
+                "narrateur, focalisation", "discours rapporté",
+                "dossier de lecture, carnet de lecteur (outils de lecture suivie)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        }
+    },
+    "Histoire-Géographie & EMC": {
+        "6ème": {
+            "notions_cles": [
+                "Se repérer dans le temps : premiers repères historiques et distinction entre histoire et fiction",
+                "Se repérer dans l’espace : passer d’une représentation personnelle aux premiers repères géographiques",
+                "Comprendre la démarche historique pour répondre à des interrogations sur le passé",
+                "Comprendre la relation entre individus, sociétés et espaces à différentes échelles",
+                "Découvrir les enjeux du développement durable dans l’étude des milieux et des activités humaines",
+                "EMC : compréhension de la règle, du droit et de la vie collective à l’école et au collège"
+            ],
+            "vocabulaire_exigible": [
+                "chronologie, repère historique", "frise chronologique (terme d’usage scolaire standard)",
+                "carte, légende, échelle", "territoire, paysage", "société, individu",
+                "règle, droit, citoyen, laïcité (terminologie EMC de base)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "Thèmes d’histoire : Chrétientés et islam (VIe–XIIIe siècles), mondes en contact",
+                "Thèmes d’histoire : Société, Église et pouvoir politique dans l’Occident féodal",
+                "Thèmes d’histoire : Transformations de l’Europe et ouverture sur le monde aux XVIe et XVIIe siècles",
+                "Thèmes de géographie : question démographique et inégal développement",
+                "Thèmes de géographie : ressources limitées, à gérer et à renouveler",
+                "Compétences : se repérer dans le temps et l’espace, raisonner, analyser des documents, pratiquer différents langages",
+                "EMC : principes et symboles de la République, vivre ensemble et respect d’autrui"
+            ],
+            "vocabulaire_exigible": [
+                "Moyen Âge, féodalité", "Chrétienté, islam", "croissance démographique, inégalités de développement",
+                "ressource, contrainte, risque", "carte thématique, croquis", "République, symbole, devise",
+                "liberté, égalité, fraternité, laïcité"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Thèmes d’histoire : Le XVIIIe siècle – expansions, Lumières et révolutions",
+                "Thèmes d’histoire : L’Europe et le monde au XIXe siècle",
+                "Thèmes d’histoire : Société, culture et politique dans la France du XIXe siècle",
+                "Thèmes de géographie : urbanisation du monde",
+                "Thèmes de géographie : mobilités humaines transnationales",
+                "Thèmes de géographie : espaces transformés par la mondialisation",
+                "Compétences : analyser et comprendre des documents, écrire et pratiquer l’oral en histoire-géographie",
+                "EMC : droits et devoirs, exercice de la citoyenneté, débat argumenté"
+            ],
+            "vocabulaire_exigible": [
+                "Lumières, Révolution", "industrialisation, bourgeoisie, prolétariat (en lien avec les thèmes officiels)",
+                "mondialisation, métropole, mégalopole", "flux migratoires, mobilité",
+                "espace urbain, périurbain", "citoyenneté, droit, devoir", "argumentation, débat"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Thèmes d’histoire : L’Europe, théâtre majeur des guerres totales (1914–1945)",
+                "Thèmes d’histoire : Le monde depuis 1945",
+                "Thèmes d’histoire : Françaises et Français dans une République repensée",
+                "Thèmes de géographie : dynamiques territoriales de la France contemporaine",
+                "Thèmes de géographie : aménagement du territoire et développement durable",
+                "Thèmes de géographie : la France et l’Union européenne",
+                "Compétences : pratiquer différents langages (cartographiques, graphiques, écrits, oraux)",
+                "EMC : valeurs et principes de la République, pluralisme, engagement et responsabilité"
+            ],
+            "vocabulaire_exigible": [
+                "guerre totale, génocide", "guerre froide, décolonisation", "Ve République, Constitution",
+                "aménagement du territoire, acteur, échelle", "Union européenne, organisation internationale",
+                "développement durable", "valeurs républicaines, engagement, responsabilité"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        }
+    },
+    "Sciences de la Vie et de la Terre (SVT)": {
+        "6ème": {
+            "notions_cles": [
+                "Non rapporté"
+            ],
+            "vocabulaire_exigible": [
+                "Non rapporté"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "La planète Terre, l’environnement et l’action humaine (phénomènes géologiques, météorologie, climat)",
+                "Risque volcanique et risques liés à l’activité interne de la Terre",
+                "Impacts des actions humaines sur les écosystèmes et les ressources naturelles",
+                "Fonctionnement du corps humain (systèmes de transport, digestion, respiration) et santé",
+                "Rôle des micro-organismes dans la digestion et l’alimentation",
+                "Reproduction des êtres vivants et dynamique des populations"
+            ],
+            "vocabulaire_exigible": [
+                "lithosphère, asthénosphère", "tectonique des plaques, aléa, risque",
+                "écosystème, biodiversité", "population, dynamique des populations",
+                "microorganisme, microbiote", "tube digestif, besoins nutritionnels",
+                "reproduction sexuée, reproduction asexuée"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Approfondissement des phénomènes géologiques (activité interne, séismes, volcanisme, risques)",
+                "Étude des impacts différenciés des activités humaines sur les écosystèmes",
+                "Régulation du fonctionnement de l’organisme humain (systèmes de transport, rôle des micro-organismes)",
+                "Lien entre alimentation, microbiote et santé",
+                "Reproduction, cycles de vie et évolution des populations",
+                "Mobilisation de démarches expérimentales et de modélisation en SVT"
+            ],
+            "vocabulaire_exigible": [
+                "aléa naturel, risque anthropique", "prévention, protection, adaptation",
+                "biodiversité, perturbation, résilience", "système de transport (circulatoire, respiratoire, etc.)",
+                "microbiote intestinal", "sélection, reproduction, fécondation"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Synthèse sur la planète Terre, l’environnement et l’action humaine (enjeux globaux)",
+                "Analyse d’exemples d’actions humaines et de leurs effets sur les écosystèmes (déforestation, pollution, etc.)",
+                "Approfondissement du lien entre comportements, hygiène de vie et santé",
+                "Lien entre reproduction, héritage, diversité du vivant et évolution",
+                "Mobilisation de données scientifiques pour argumenter des choix de gestion environnementale",
+                "Usage critique de modèles scientifiques en SVT"
+            ],
+            "vocabulaire_exigible": [
+                "enjeu environnemental global", "pollution, ressource renouvelable / non renouvelable",
+                "prévention, risque sanitaire", "génération, population, dynamique",
+                "argumentation scientifique (données, hypothèses, conclusion)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        }
+    },
+    "Physique-Chimie": {
+        "6ème": {
+            "notions_cles": [
+                "Non rapporté"
+            ],
+            "vocabulaire_exigible": [
+                "Non rapporté"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "Organisation et transformations de la matière",
+                "Mouvements et interactions (description simple des mouvements et actions)",
+                "L’énergie et ses conversions dans des situations usuelles",
+                "Ondes et signaux pour observer et communiquer",
+                "Démarche expérimentale en physique-chimie (observer, mesurer, interpréter)"
+            ],
+            "vocabulaire_exigible": [
+                "organisation de la matière (solide, liquide, gaz)", "transformation physique, transformation chimique",
+                "mouvement, trajectoire (terminologie générale du programme)", "interaction (contact, à distance)",
+                "énergie, transfert, conversion", "onde, signal"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Approfondissement de l’organisation et des transformations de la matière (changements d’état, réactions simples)",
+                "Étude de mouvements et d’interactions dans différents contextes (quotidiens, techniques)",
+                "Analyse de chaînes de conversions d’énergie dans des systèmes simples",
+                "Étude d’ondes et de signaux (lumière, son) pour observer et communiquer",
+                "Pratique de la modélisation et du raisonnement expérimental"
+            ],
+            "vocabulaire_exigible": [
+                "modèle de la matière (échelle usuelle du programme)", "changements d’état",
+                "interaction, force (termes usuels d’introduction)",
+                "énergie mécanique, électrique, thermique (catégories usuelles du cycle 4)",
+                "signal lumineux, signal sonore"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Synthèse sur organisation et transformations de la matière (modèles simples)",
+                "Analyse de situations de mouvements et interactions pour prévoir ou interpréter un comportement",
+                "Bilans énergétiques simples et rendement dans des systèmes techniques usuels",
+                "Utilisation de signaux pour transmettre une information (exemples courants)",
+                "Démarche scientifique complète : questionnement, hypothèse, expérimentation, modélisation, conclusion"
+            ],
+            "vocabulaire_exigible": [
+                "modèle (en physique-chimie)", "bilan d’énergie (formulation qualitative au niveau du programme)",
+                "rendement (sens qualitatif et calcul simple)", "signal numérique / analogique (terminologie du programme)",
+                "grandeur mesurée, unité (terminologie générale)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        }
+    },
+    "Technologie": {
+        "6ème": {
+            "notions_cles": [
+                "Non rapporté"
+            ],
+            "vocabulaire_exigible": [
+                "Non rapporté"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "Découvrir des objets et systèmes techniques répondant à des besoins",
+                "Identifier fonctions et solutions techniques simples dans des objets usuels",
+                "Comprendre la place de l’informatique et de la programmation dans les systèmes techniques",
+                "Premières démarches de conception et de réalisation d’objets ou prototypes simples",
+                "Prendre en compte l’environnement et les usages dans l’étude d’un objet"
+            ],
+            "vocabulaire_exigible": [
+                "objet technique, système technique", "fonction d’usage, fonction d’estime (terminologie d’usage en technologie collège)",
+                "schéma fonctionnel simple", "prototype, maquette", "informations, données (en lien avec l’informatique)",
+                "algorithme simple, programme"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Analyser le fonctionnement d’objets et systèmes techniques (flux de matière, d’énergie et d’information)",
+                "Comprendre l’organisation fonctionnelle d’un système et ses composants",
+                "Concevoir et réaliser des objets ou systèmes simples intégrant capteurs et actionneurs",
+                "Utiliser la programmation pour piloter un système technique simple",
+                "Prendre en compte des critères de développement durable et d’impact environnemental"
+            ],
+            "vocabulaire_exigible": [
+                "chaîne d’énergie (alimentation, distribution, conversion, action)",
+                "chaîne d’information (acquérir, traiter, communiquer)",
+                "capteur, actionneur", "diagramme fonctionnel",
+                "protocole (échanges de données dans un réseau simple)", "prototype, cahier des charges"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Approfondir l’analyse de systèmes techniques complexes (organisation, flux, contraintes)",
+                "Mener un projet de conception–réalisation en équipe (de l’idée au prototype)",
+                "Mobiliser la programmation pour automatiser un comportement ou un traitement d’information",
+                "Étudier le cycle de vie d’un produit et ses impacts (ressources, énergie, recyclage)",
+                "Relier innovation technologique, besoins sociaux et enjeux de développement durable"
+            ],
+            "vocabulaire_exigible": [
+                "cycle de vie d’un produit", "contrainte, critère de choix",
+                "innovation, obsolescence (terminologie usuelle du programme)",
+                "système automatisé", "capteur, actionneur, interface de commande", "impact environnemental"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        }
+    },
+    "Langues Vivantes (Anglais - LVA)": {
+        "6ème": {
+            "notions_cles": [
+                "Poursuivre l’apprentissage d’une langue vivante étrangère commencé au cycle 2",
+                "Développer de manière équilibrée les cinq activités langagières (écouter, lire, parler en continu, écrire, réagir et dialoguer)",
+                "Comprendre des messages oraux simples en lien avec l’environnement proche",
+                "Comprendre des textes courts et simples (supports scolaires, vie quotidienne)",
+                "Produire des énoncés oraux et écrits très guidés sur soi et son environnement",
+                "Découvrir des repères culturels des pays anglophones"
+            ],
+            "vocabulaire_exigible": [
+                "activités langagières (écouter, lire, parler, écrire, interagir)",
+                "salutations, présentation de soi", "vocabulaire du quotidien (famille, école, loisirs, lieux de vie)",
+                "lexique des consignes de classe", "alphabet, nombres usuels", "formulations simples de questions et réponses"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "Approfondir la compréhension orale et écrite de documents simples à légèrement complexes",
+                "Produire des énoncés oraux plus développés (description, récit simple)",
+                "Écrire de courts textes structurés sur des expériences personnelles",
+                "Mobiliser des connaissances lexicales, grammaticales et culturelles dans des situations de communication variées",
+                "Ancrer les apprentissages dans des situations culturelles authentiques de l’aire anglophone"
+            ],
+            "vocabulaire_exigible": [
+                "formules pour parler de goûts et préférences", "lexique des activités, métiers, lieux de la ville",
+                "structures de base du présent et du passé proche (niveau A1+/A2)",
+                "connecteurs simples (and, but, because, then)", "lexique pour se repérer dans un document (title, picture, paragraph, etc.)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Atteindre au moins le niveau A2 dans les cinq activités langagières pour la LV1 en fin de cycle (avec possibilité de B1 dans plusieurs activités)",
+                "Comprendre des documents oraux et écrits plus longs et plus denses",
+                "Produire des prises de parole continues plus structurées (raconter, décrire, expliquer)",
+                "Écrire des textes organisés (lettre, message, récit bref, description, opinion simple)",
+                "Mobiliser des stratégies de compréhension (repérage d’indices, répétitions, structures récurrentes)",
+                "Percevoir les spécificités culturelles du monde anglophone dans des situations variées"
+            ],
+            "vocabulaire_exigible": [
+                "lexique de l’environnement proche (ville, activités, métiers, etc.)",
+                "expressions pour localiser dans le temps et l’espace",
+                "formes verbales de base au présent, passé, futur simple (au niveau du CECRL visé)",
+                "tournures fréquentes pour exprimer l’opinion et la justification",
+                "vocabulaire élémentaire de la vie culturelle et médiatique (films, musiques, réseaux, etc.)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Consolider au moins le niveau A2 et viser B1 dans plusieurs activités langagières pour la LV1",
+                "Comprendre des documents authentiques simples, oraux et écrits, avec appuis",
+                "S’exprimer à l’oral avec plus d’aisance sur des sujets familiers et scolaires",
+                "Écrire des textes plus complets (récit, description, prise de position simple)",
+                "Utiliser des repères culturels de l’aire anglophone pour interpréter des documents",
+                "Mettre en œuvre des stratégies d’auto-correction et de reformulation"
+            ],
+            "vocabulaire_exigible": [
+                "lexique plus étendu de la vie quotidienne, scolaire et sociale",
+                "expressions de liaison plus variées (however, in my opinion, first, then, finally, etc.)",
+                "formes verbales correspondantes au profil A2/B1 dans le CECRL (temps simples et principaux modaux usuels)",
+                "lexique de base pour commenter des documents (character, setting, main idea, opinion)",
+                "références culturelles simples (fêtes, institutions, modes de vie)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        }
+    },
+    "Éducation Physique et Sportive (EPS)": {
+        "6ème": {
+            "notions_cles": [
+                "Développer sa motricité et apprendre à s’exprimer en utilisant son corps",
+                "Explorer différents jeux et activités physiques et sportives",
+                "Apprendre à partager des règles et assumer des rôles et responsabilités",
+                "Découvrir les liens entre activité physique, santé et hygiène de vie",
+                "Commencer à s’approprier une culture physique, sportive et artistique"
+            ],
+            "vocabulaire_exigible": [
+                "motricité, action motrice", "règle, rôle (joueur, arbitre, observateur)",
+                "effort, récupération", "sécurité, fair-play",
+                "activité physique, performance (au sens scolaire)", "échauffement"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "Produire une performance optimale mesurable à une échéance donnée",
+                "S’approprier des méthodes et outils par la pratique physique (s’échauffer, répéter, réguler son effort)",
+                "Partager des règles, assumer des rôles et des responsabilités dans des activités collectives",
+                "Apprendre à entretenir sa santé par une activité physique régulière",
+                "S’approprier une culture physique, sportive et artistique (diversité des APSA)"
+            ],
+            "vocabulaire_exigible": [
+                "performance mesurable (distance, temps, score)", "répétition, entraînement",
+                "intensité de l’effort (qualificatifs usuels du programme)",
+                "rôle social (capitaine, arbitre, juge)", "activité physique, santé"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Affiner ses habiletés motrices pour améliorer la performance dans différents champs d’apprentissage",
+                "Adapter son engagement et gérer l’effort en fonction de la tâche et de ses ressources",
+                "Coopérer et s’opposer individuellement et collectivement dans des jeux sportifs variés",
+                "Construire des repères pour entretenir sa santé (charge d’entraînement, récupération)",
+                "Approfondir sa culture des pratiques physiques, sportives et artistiques"
+            ],
+            "vocabulaire_exigible": [
+                "habileté, coordination", "stratégie, projet d’action", "gestion de l’effort (rythme, allure)",
+                "récupération, étirement (termes usuels scolaires)", "chorégraphie, prestation (pour les activités à visée artistique)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Stabiliser et transférer ses compétences dans les différents champs d’apprentissage",
+                "Gérer son engagement moteur et émotionnel en situation d’opposition et de coopération",
+                "Construire un projet personnel d’activité physique pour la santé",
+                "Assumer pleinement des rôles sociaux dans les activités (organisation, arbitrage, aide à l’entraînement)",
+                "Situer les pratiques physiques et sportives dans une culture commune"
+            ],
+            "vocabulaire_exigible": [
+                "projet d’entraînement personnel", "gestion du risque dans l’activité",
+                "rôle d’arbitre ou de juge", "comportement citoyen en EPS",
+                "culture sportive (référence aux grandes familles d’APSA du programme)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        }
+    },
+    "Arts Plastiques": {
+        "6ème": {
+            "notions_cles": [
+                "Expérimenter, produire, créer en manipulant des matériaux et outils variés",
+                "Découvrir la représentation, les images, la relation réalité / fiction",
+                "Observer la matérialité de l’œuvre, l’objet et l’œuvre",
+                "Commencer à se repérer dans les domaines liés aux arts plastiques",
+                "Exprimer et décrire simplement sa pratique et celle des autres"
+            ],
+            "vocabulaire_exigible": [
+                "forme, couleur, matière (terminologie de base)", "support, format",
+                "geste, trace", "image, représentation", "œuvre, auteur, spectateur"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "Expérimenter et choisir des langages plastiques pour traduire des intentions",
+                "Mettre en œuvre un projet plastique simple (de l’intention à la réalisation)",
+                "Interroger la relation entre œuvre, espace, auteur, spectateur",
+                "Développer un regard critique sur sa production et celle des autres",
+                "Approfondir les repères dans l’histoire des arts"
+            ],
+            "vocabulaire_exigible": [
+                "composition", "point de vue", "plan (avant-plan, arrière-plan, sens usuel des programmes)",
+                "contraste, nuance", "installation (sens usuel arts plastiques)", "référence, citation (d’une œuvre)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Concevoir et réaliser des projets plastiques plus complexes et contextualisés",
+                "Explorer la matérialité de l’œuvre (support, techniques, procédés)",
+                "Mettre en relation des œuvres de domaines et d’époques variés",
+                "Analyser plus finement la relation œuvre–espace–public",
+                "Mobiliser une culture artistique pour nourrir ses productions"
+            ],
+            "vocabulaire_exigible": [
+                "cadrage, hors-champ", "texture, empâtement (terminologie usuelle du programme)",
+                "installation, dispositif", "espace d’exposition", "réception, interprétation"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Mener un projet plastique personnel ou collectif de la conception à la présentation",
+                "Articuler intention, choix plastiques et discours sur l’œuvre",
+                "Situer ses productions dans une histoire des formes et des pratiques artistiques",
+                "Questionner la place de l’œuvre dans la société et dans l’espace public",
+                "Préparer la transition vers le lycée en consolidant les compétences d’analyse et de création"
+            ],
+            "vocabulaire_exigible": [
+                "démarche de projet", "intention plastique", "dispositif de presentation",
+                "contextualisation d’une œuvre", "références croisées (arts, périodes, cultures)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        }
+    },
+    "Éducation Musicale": {
+        "6ème": {
+            "notions_cles": [
+                "Réaliser des projets musicaux d’interprétation (chant) ou de création simples",
+                "Écouter, comparer et construire une première culture musicale commune",
+                "Explorer sa voix parlée et chantée",
+                "Découvrir des organisations musicales simples (répétition, contraste)",
+                "Échanger autour de ce que l’on entend et produit"
+            ],
+            "vocabulaire_exigible": [
+                "voix parlée, voix chantée", "rythme, tempo", "intensité (forte, douce – terminologie scolaire)",
+                "timbre (voix, instruments)", "refrain, couplet"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "5ème": {
+            "notions_cles": [
+                "Réaliser des projets musicaux plus structurés (interprétation ou création collective)",
+                "Identifier, décrire et comparer des organisations musicales plus complexes",
+                "Explorer des liens entre musique et autres arts ou contextes culturels",
+                "Échanger, argumenter et débattre autour d’écoutes",
+                "Utiliser la voix et éventuellement des instruments scolaires pour interpréter un répertoire"
+            ],
+            "vocabulaire_exigible": [
+                "pulsation, rythme", "phrase musicale, motif", "nuance (piano, forte, crescendo, etc.)",
+                "texture simple (solo, chœur, accompagnement)", "répertoire, interprétation"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "4ème": {
+            "notions_cles": [
+                "Concevoir, créer et réaliser des pièces musicales en lien avec des projets artistiques",
+                "Identifier et décrire des organisations musicales complexes",
+                "Situer et comparer des musiques de styles proches ou éloignés",
+                "Prendre en compte les droits d’auteur et les sources dans les projets musicaux",
+                "Articuler écoute, pratique et culture musicale"
+            ],
+            "vocabulaire_exigible": [
+                "structure musicale (introduction, développement, coda, etc.)",
+                "style musical (au sens scolaire du programme)", "arrangement, orchestration simple",
+                "source, droit d’auteur", "enregistrement, mixage (terminologie d’usage scolaire)"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        },
+        "3ème": {
+            "notions_cles": [
+                "Mener des projets musicaux aboutis (création, interprétation, restitution publique scolaire)",
+                "Analyser et commenter des œuvres musicales à partir de critères construits au collège",
+                "Mettre en relation musiques et contextes historiques, sociaux et culturels",
+                "Mobiliser la culture musicale acquise pour élaborer un jugement argumenté",
+                "Préparer la transition vers le lycée par une pratique musicale autonome"
+            ],
+            "vocabulaire_exigible": [
+                "analyse musicale (critères simples : forme, timbres, dynamiques)",
+                "répertoire de référence (œuvres étudiées)", "critère esthétique (notion scolaire)",
+                "projet musical, restitution", "interprétation, intention"
+            ],
+            "limites_zpd": [
+                "Non rapporté"
+            ]
+        }
+    }
+}
 
-# ==========================================
-# CONFIGURATION DE LA PAGE & CSS
-# ==========================================
-st.set_page_config(page_title="Réviser avec les sciences cognitives", page_icon="🦉", layout="centered")
-
-st.markdown("""
-    <style>
-    .stApp { transition: all 0.1s ease-in-out; }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stButton>button { width: 100%; border-radius: 15px; font-weight: bold; }
-    .stChatMessage { border-radius: 15px; border: 1px solid #E2E8F0; }
-    </style>
-""", unsafe_allow_html=True)
-
-MAX_HISTORIQUE_MESSAGES = 6
-
-# ==========================================
-# GESTION DE L'ÉTAT DE SESSION (State)
-# ==========================================
-if "session_active" not in st.session_state: st.session_state.session_active = False
-if "messages" not in st.session_state: st.session_state.messages = []
-if "texte_cours_integral" not in st.session_state: st.session_state.texte_cours_integral = ""
-if "tutoriel_vu" not in st.session_state: st.session_state.tutoriel_vu = False
-if "lettre_attendue" not in st.session_state: st.session_state.lettre_attendue = "NA"
-if "attendus_cours" not in st.session_state: st.session_state.attendus_cours = None
-
-# ==========================================
-# CONNEXION AU RÉFÉRENTIEL SÉCURISÉ
-# ==========================================
-try:
-    REFERENTIELS = referentiels.REFERENTIEL_COLLEGE
-except AttributeError:
-    st.error("Le dictionnaire REFERENTIEL_COLLEGE est introuvable dans le fichier referentiels.py.")
-    REFERENTIELS = {}
-
-# ==========================================
-# --- TUTORIEL D'ACCUEIL ---
-# ==========================================
-@st.dialog("👋 Bienvenue dans cette application de révision")
-def afficher_tutoriel():
-    st.markdown("""
-        <style>
-        .big-font { font-size: 1.25rem !important; line-height: 1.7 !important; color: #2D3748; }
-        .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.35rem; display: block; margin-top: 15px; }
-        .mode-box { background-color: #F0F4F8; padding: 15px; border-radius: 12px; margin: 15px 0; border-left: 6px solid #5B9BD5; }
-        </style>
-        <div class="big-font">
-        Cette application utilise les principes issus des <b>sciences cognitives</b> pour t'aider à réviser efficacement.<br>
-        <div class="mode-box">
-        <b>💡 Quel mode choisir ?</b><br><br>
-        • <b>Mémorisation :</b> Pour retenir les définitions et les concepts "par cœur".<br><br>
-        • <b>Compréhension :</b> Pour maîtriser ton cours en profondeur en l'expliquant avec tes propres mots.
-        </div>
-        <b>Comment l'utiliser en 3 étapes :</b><br>
-        <span class="step-title">1. ⚙️ Règle l'application</span> Choisis ton mode et ton niveau.<br>
-        <span class="step-title">2. 🧭 Donne-lui ton cours</span> Charge ton PDF ou colle ton texte.<br>
-        <span class="step-title">3. 💬 Discute</span> Réponds aux questions dans le chat, et demande ton bilan à la fin !
-        </div><br>
-    """, unsafe_allow_html=True)
-    if st.button("🚀 J'ai compris, c'est parti !", use_container_width=True):
-        st.session_state.tutoriel_vu = True
-        st.rerun()
-
-if not st.session_state.tutoriel_vu:
-    afficher_tutoriel()
-
-# ==========================================
-# SCHÉMAS PYDANTIC (MÉTACOGNITION IA)
-# ==========================================
-class ReflexionTuteur(BaseModel):
-    """Schéma imposant la réflexion avant l'action (Inhibition)."""
-    diagnostic_interne: str = Field(description="Analyse factuelle de la réponse de l'élève et vérification stricte de la faisabilité logique.")
-    lettre_attendue_qcm: str = Field(description="Si ta reponse_visible contient une nouvelle question QCM, indique ici UNIQUEMENT la lettre de la bonne réponse (A, B, C ou D). Sinon, écris 'NA'.")
-    concept_actuel_evalue: str = Field(description="Le concept précis du cours que tu es en train de faire travailler à l'élève dans ton message actuel.")
-    liste_concepts_restants_du_cours: str = Field(description="Analyse l'INTÉGRALITÉ du cours fourni. Écris une CHAÎNE DE CARACTÈRES UNIQUE (pas de tableau) listant les concepts majeurs qu'il te reste à tester ensuite. S'ils ont TOUS été testés, écris exactement le mot 'Aucun'.")
-    strategie_choisie: str = Field(description="Catégorisation stricte de l'intervention (ex: Feedback de Processus, Remédiation, Sacha-Question, etc.).")
-    reponse_visible: str = Field(description="Le texte final adressé à l'élève, respectant le format LaTeX et la Transparence Cognitive.")
-
-# ==========================================
-# DÉLÉGATION NEURO-SYMBOLIQUE (SYMPY)
-# ==========================================
-def verifier_calcul_formel(expression_prof: str, expression_eleve: str) -> dict:
-    """Vérifie l'exactitude mathématique d'une réponse élève par rapport à une solution."""
+def obtenir_attendus(matiere, niveau):
+    """
+    Récupère les données sécurisées (Noyau de compétences) pour un binôme matière/niveau.
+    Retourne un dictionnaire contenant : notions_cles, vocabulaire_exigible, limites_zpd
+    """
     try:
-        transformations = (standard_transformations + (implicit_multiplication_application,))
-        exp_p_str = str(expression_prof).replace('^', '**').replace(',', '.')
-        exp_e_str = str(expression_eleve).replace('^', '**').replace(',', '.')
-        
-        exp_p = parse_expr(exp_p_str, transformations=transformations)
-        exp_e = parse_expr(exp_e_str, transformations=transformations)
-        
-        est_valide = sp.simplify(exp_p - exp_e) == 0
-        return {"est_valide": bool(est_valide), "forme_simplifiee_eleve": str(exp_e)}
-    except Exception as e:
-        return {"erreur": f"Syntaxe non reconnue par le moteur formel : {str(e)}"}
-
-# ==========================================
-# FILTRE EXÉCUTIF LOCAL (spaCy)
-# ==========================================
-@st.cache_resource
-def charger_modele_nlp():
-    """Charge le modèle linguistique de base (mis en cache pour performance)."""
-    try:
-        import spacy
-        return spacy.load("fr_core_news_sm")
-    except OSError:
-        subprocess.run([sys.executable, "-m", "spacy", "download", "fr_core_news_sm"], check=True)
-        import spacy
-        return spacy.load("fr_core_news_sm")
-
-class AgentCritique:
-    """Filtre exécutif pour limiter la charge cognitive extrinsèque."""
-    def __init__(self):
-        self.nlp = charger_modele_nlp()
-
-    def analyser(self, texte_reponse):
-        doc = self.nlp(texte_reponse)
-        # Mesure de la surcharge cognitive (Phrase de plus de 30 mots)
-        phrases_longues = [sent.text for sent in doc.sents if len([t for t in sent if not t.is_punct]) > 30]
-        if phrases_longues:
-            return False, f"Surcharge cognitive détectée. Ta phrase est trop longue ({len([t for t in self.nlp(phrases_longues[0]) if not t.is_punct])} mots). Scinde tes idées en phrases plus courtes pour respecter la mémoire de travail de l'élève."
-
-        # Filtrage didactique (Blocage des grandeurs physiques négatives)
-        risque_negatif = any(token.text.startswith('-') and token.pos_ == "NUM" for token in doc)
-        if risque_negatif:
-             for token in doc:
-                 if token.text.startswith('-') and token.pos_ == "NUM":
-                     if token.i + 1 < len(doc) and doc[token.i + 1].pos_ == "NOUN":
-                         return False, "Aberration didactique détectée. On ne peut pas posséder une quantité négative d'objets physiques (ex: pommes). Adapte ton analogie pour les relatifs (utilise la température, les dettes, ou l'ascenseur)."
-
-        return True, ""
-
-agent_critique = AgentCritique()
-
-# ==========================================
-# --- DIALOGUE BILAN FINAL & WOOCLAP ---
-# ==========================================
-@st.dialog("📈 Ton Bilan de Révision", width="large")
-def afficher_bilan():
-    if len(st.session_state.messages) > 1:
-        with st.spinner("Analyse métacognitive en cours..."):
-            historique_complet = []
-            if st.session_state.texte_cours_integral:
-                historique_complet.extend([{"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]}, {"role": "model", "parts": ["Compris."] }])
-            
-            messages_visibles = [m for m in st.session_state.messages if not m.get("isMeta")]
-            for msg in messages_visibles:
-                role = "user" if msg["role"] == "user" else "model"
-                historique_complet.append({"role": role, "parts": [msg["content"]]})
-                
-            instruction_metacognitive = """Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
-            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
-            Structure obligatoirement ton bilan ainsi :
-            1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir (très bref).
-            2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois (1 phrase).
-            """
-
-            if "Mode A" in st.session_state.objectif:
-                instruction_metacognitive += """3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire le cours donne l'illusion de savoir (biais de fluence) et que seul l'effort de mémoire compte.
-            4. 📝 Prochaine étape : Suggère en 1 courte phrase de faire à la maison exactement comme aujourd'hui : cacher son cours et forcer son cerveau à retrouver les informations sur une feuille blanche.
-            """
-            else:
-                instruction_metacognitive += """3. ⏳ Le piège de la correction : Rappelle en 1 courte phrase que lire une correction donne l'illusion d'avoir compris. La vraie compréhension, c'est savoir l'expliquer soi-même.
-            4. 📝 Prochaine étape : Suggère en 1 courte phrase de faire à la maison exactement comme aujourd'hui : reprendre un exercice et expliquer la méthode à voix haute comme à un camarade, ou chercher les erreurs.
-            """
-
-            model_bilan = genai.GenerativeModel("gemini-3-flash-preview", system_instruction=instruction_metacognitive)
-            chat_bilan = model_bilan.start_chat(history=historique_complet)
-            
-            try:
-                reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif ultra-concis selon tes instructions.")
-                st.success(reponse.text)
-                st.divider()
-                st.markdown("### 📊 Évaluation de l'outil")
-                st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
-                iframe_wooclap = """<iframe allowfullscreen frameborder="0" height="100%" mozallowfullscreen src="https://app.wooclap.com/FBXMBG/questionnaires/69ad313cc7cb13027e159133" style="min-height: 550px; min-width: 300px" width="100%"></iframe>"""
-                components.html(iframe_wooclap, height=580)
-                st.divider()
-                if st.button("🔄 J'ai terminé, recommencer une nouvelle session", type="primary"):
-                    st.session_state.session_active = False
-                    st.session_state.messages = []
-                    st.session_state.texte_cours_integral = ""
-                    st.session_state.lettre_attendue = "NA"
-                    st.session_state.attendus_cours = None
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Impossible de générer le bilan pour le moment : {e}")
-    else:
-        st.warning("Il faut d'abord discuter un peu avec le tuteur avant de pouvoir analyser tes réponses !")
-
-# ==========================================
-# 🛑 ZONE SANCTUAIRE : PROMPT SYSTÈME AVEC BIFURCATION STRICTE 🛑
-# ==========================================
-def generer_prompt_systeme(niveau_eleve, objectif_eleve, strategie_generative=None, attendus=None, matiere_nom="Non spécifiée", niveau_nom="Non spécifié"):
-    prompt_systeme = ""
-
-    # INJECTION DU CADRE INSTITUTIONNEL (ZPD)
-    if attendus:
-        notions = "\n- ".join(attendus.get('notions_cles', ['Non rapporté']))
-        vocabulaire = ", ".join(attendus.get('vocabulaire_exigible', ['Non rapporté']))
-        limites = "\n- ".join(attendus.get('limites_zpd', ['Aucune limite spécifiée']))
-        
-        prompt_systeme += f"""# CADRE INSTITUTIONNEL (ZONE PROXIMALE DE DÉVELOPPEMENT)
-Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter toute surcharge cognitive :
-- MATIÈRE : {matiere_nom} ({niveau_nom})
-- NOTIONS CLÉS AUTORISÉES : {notions}
-- VOCABULAIRE EXIGIBLE (À privilégier) : {vocabulaire}
-- LIMITES STRICTES (HORS-PROGRAMME ABSOLU) : {limites}
-
-"""
-
-    # 1. SOCLE COMMUN (Règles intangibles)
-    prompt_systeme += """# ➗ GESTION DES NOTATIONS SCIENTIFIQUES ET MATHÉMATIQUES
-- L'élève ne dispose pas de clavier mathématique. Il saisira ses formules en texte brut (ex: "racine de x", "3/4", "x au carre").
-- Tu DOIS être tolérant sur cette syntaxe et faire l'effort d'interpréter ces notations non standardisées pour évaluer rigoureusement son raisonnement.
-- Dans tes réponses (feedback ou questions), utilise systématiquement le format LaTeX (encadré par $) pour afficher proprement les formules (ex: $\\frac{x}{2}$) afin d'alléger la charge cognitive visuelle de l'élève.
-
-# 🛑 CONTRAINTES ET INTERDICTIONS (ANTI-PROMPTS)
-- Pas de jugement personnel sur le "Soi" : Ne dis jamais "Tu es nul" ou "Tu es brillant".
-- Pas de feedback stéréotypé vide ou immérité : Interdiction de dire juste "C'est juste/faux" sans explication factuelle, et évite les "Bravo !" vagues.
-- Pas de comparaison sociale : Ne compare jamais l'élève aux autres.
-- ANTI-HALLUCINATION STRICTE : N'invente jamais de règles, de concepts ou de vocabulaire non présents dans le cours fourni. Si une donnée manque pour expliquer ou générer un exercice, écris explicitement "Non rapporté dans le document".
-"""
-
-    # 2. BIFURCATION ARCHITECTURALE ABSOLUE
-    if strategie_generative == "Effet_Protege":
-        prompt_systeme += """
-# 🎭 RÔLE TEMPORAIRE : LE CAMARADE EN DIFFICULTÉ (EFFET PROTÉGÉ / PEER TUTORING)
-ATTENTION : Oublie ton rôle de tuteur expert. Tu es "Sacha", un élève qui a du mal à comprendre le cours.
-Ton but caché est d'obliger l'utilisateur à structurer sa pensée et vulgariser le concept.
-Tu n'es PAS un professeur, tu n'es PAS un expert EdTech, tu n'es PAS une IA.
-
-🛑 RÈGLES STRICTES DU JEU DE RÔLE :
-1. ANTI-RÉCITATION : N'utilise AUCUN terme technique avant l'utilisateur. Rejette le jargon ("C'est trop compliqué, on dirait le prof. Tu peux m'expliquer simplement ?").
-2. SCAFFOLDING NAÏF : Dès ta première intervention, explicite ta surcharge cognitive (« J'ai lu le cours mais tout s'embrouille, par quoi je dois commencer ? »). Ensuite, pose UNE SEULE question naïve à la fois. Si l'explication est trop longue, coupe-le ("Attends, tu vas trop vite. C'est quoi l'étape 1 ?").
-3. L'ERREUR INTENTIONNELLE : Injecte la confusion la plus classique que font les novices. Force l'utilisateur à démonter cette erreur logique.
-4. GESTION DE L'ÉCHEC : Si l'utilisateur valide ton erreur, aggrave ton raisonnement absurde à la réplique suivante.
-5. LIMITE DE BLOCAGE (2 itérations) : Si l'utilisateur échoue 2 fois de suite à t'expliquer ou tourne en rond, casse la boucle en simulant une trouvaille dans le cours : "Attends, j'ai regardé dans le manuel, ils disent que c'est [Solution du cours]. Mais du coup, comment on applique ça pour [Question similaire] ?"
-6. DÉCLIC ET ÉVALUATION INVERSÉE : Si l'utilisateur corrige ton erreur clairement, reformule avec ses mots. Valorise sa pédagogie en explicitant le déclic ("Ton exemple m'a débloqué parce qu'avant je confondais avec [X]"). Demande-lui une question piège pour te tester.
-
-# LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
-- Séquençage : L'utilisateur effectue cet exercice PENDANT l'étude, avec le document sous les yeux (à livre ouvert).
-- Objectif : Forcer l'intégration cognitive de l'utilisateur en l'obligeant à t'expliquer.
-"""
-    else:
-        prompt_systeme += """
-# RÔLE ET MISSION
-Tu es un expert en ingénierie pédagogique cognitive et spécialiste EdTech.
-Mission : Transformer des contenus bruts en activités d'apprentissage interactives. Base-toi EXCLUSIVEMENT sur la "BASE DE CONNAISSANCES DU COURS" fournie au début de la conversation pour le fond.
-Objectif : Réduire la distance entre la compréhension actuelle de l'élève et la cible pédagogique, tout en développant sa métacognition.
-
-# DIRECTIVES DE GUIDAGE (STRICTES)
-1. Flux interactif : Pose UNE SEULE question à la fois. Attends la réponse de l'élève.
-2. Maïeutique et Règle des 2 Itérations : Ne donne jamais la solution d'emblée, et NE DONNE JAMAIS LES MOTS-CLÉS ATTENDUS. Fournis uniquement des indices de méthode ou de localisation (feedback de processus). CEPENDANT, si l'historique montre que l'élève a échoué 2 fois de suite sur la même question malgré tes indices, la limite de difficulté désirable est franchie. Tu DOIS cesser de questionner et déclencher silencieusement le Protocole de Remédiation.
-3. Concision extrême : Feedbacks limités à 2 ou 3 phrases MAXIMUM. Aucun cours magistral (sauf en phase de remédiation).
-4. Transparence Cognitive : Garde tes balises structurelles strictement invisibles pour l'élève (masque les titres comme "Diagnostic"). En revanche, au début de la convsersation, sois explicite sur la méthode d'apprentissage en utilisant un vocabulaire simple, adapté à un élève. Nomme la strategie que tu utilises au début de la conversation (ex: "récupération en mémoire", "détection d'erreur", "démonstration") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex:"pour mémoriser plus longtemps", "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
-5. Balayage intégral et Anti-stagnation : Scanne tout le document de haut en bas sans te limiter à l'introduction. À chaque nouvelle question, avance dans le cours. Passe au concept suivant dès que l'objectif d'apprentissage de la question est atteint (en Mode Compréhension, cela peut impliquer de demander à l'élève de justifier une réponse juste avant d'avancer), OU s'il échoue à la tâche partielle du Protocole de Remédiation. Dans ce dernier cas d'échec, donne-lui simplement la réponse finale avec bienveillance, et passe obligatoirement à la suite. Ne le bloque jamais indéfiniment.
-6. Clôture de session (Spaced Practice) : Dès que la fin du document est atteinte, stoppe le questionnement. Félicite l'élève pour son effort cognitif, et invite-le explicitement à cliquer sur le bouton "🛑 Terminer et voir ma synthèse" situé dans le panneau latéral pour découvrir son bilan, puis à fermer l'application pour y revenir dans quelques jours.
-
-# STRUCTURES D'INTERVENTION OBLIGATOIRES
-Pour rédiger ta réponse, tu dois formuler un paragraphe unique qui intègre implicitement l'une des trois structures suivantes, selon la situation :
-
-Structure 1 : Feedback de Processus
-Intègre ces 3 étapes de manière fluide :
-1. Constat factuel : Valide ou invalide le résultat objectivement.
-2. Diagnostic : Identifie précisément la règle ou l'étape bloquante/réussie (Haute Info).
-3. Levier stratégique : Indique une méthode cognitive pour déduire la réponse (analogie, décomposition, indice logique basé sur le cours), SANS donner la réponse finale. Interdiction stricte de dire simplement "relis le cours". Pousse l'élève à utiliser sa réflexion.
-
-Structure 2 : Feedback d'Autorégulation et Monitorage (Métacognition)
-Intègre ces 3 étapes de manière fluide :
-1. Effet miroir : Décris la réponse de l'élève de manière factuelle, sans jugement.
-2. Activation radar : Interroge son système de détection pour le faire réfléchir sur son action OU demande-lui d'évaluer l'efficacité de la méthode qu'il vient d'utiliser.
-3. Ouverture : Pousse-le à la décision ou à l'action corrective sans donner la réponse.
-
-Structure 3 : Protocole de Remédiation (À déclencher EXCLUSIVEMENT après 2 échecs consécutifs)
-1. Démonstration pas-à-pas (Problème résolu) : Stoppe le questionnement. Donne la bonne réponse exacte à la question bloquante et explique la démarche pas-à-pas en utilisant UNIQUEMENT le vocabulaire du cours.
-2. Tâche partielle (Échafaudage) : Relance avec une question isomorphe (même structure logique, mais avec d'autres variables tirées du cours). Fournis le début de la résolution pour que l'élève n'ait qu'à compléter la dernière étape. Si le cours ne permet pas de créer une question isomorphe, simplifie simplement la question initiale.
-
-# EXEMPLES DE RÉPONSES ATTENDUES (FEW-SHOT PROMPTING)
-Voici comment tu dois formuler tes réponses pour qu'elles soient naturelles et intègrent les étapes sans les nommer :
-
-Exemple de Feedback de Processus avec Transparence Cognitive :
-"Tu as bien identifié que la photosynthèse nécessite de la lumière. Cependant, tu as oublié un élément gazeux indispensable dans ton équation. Pour forcer ton cerveau à faire le lien, pense à ce que les êtres humains expirent lors de la respiration : la plante utilise précisément ce gaz de l'air pour se nourrir. Quel est-il ?"
-
-Exemple de Feedback d'Autorégulation attendu :
-"Tu as écrit que la Révolution a commencé en 1792. Regarde attentivement la chronologie dans ton document. Quel événement majeur de 1789 marque réellement le début de cette période ?"
-"""
-        # Sous-branche : Niveau de l'élève (Uniquement pour le Tuteur)
-        if niveau_eleve == "Novice":
-            prompt_systeme += """
-# 🌳 PROFIL ÉLÈVE : NOVICE
-L'élève construit sa compétence et est sujet à la surcharge cognitive.
-- INTERDICTION ABSOLUE : N'utilise JAMAIS le Feedback d'Autorégulation.
-- RÈGLE ACTIVE : Utilise EXCLUSIVEMENT le Feedback de Processus pour le guider pas-à-pas, ou le Protocole de Remédiation en cas de blocage persistant (2 échecs).
-"""
-        else:
-            prompt_systeme += """
-# 🌳 PROFIL ÉLÈVE : AVANCÉ
-L'élève possède les bases mais peut faire des étourderies.
-- Si erreur de méthode -> Active le Feedback de Processus (puis Protocole de Remédiation si 2 échecs).
-- Si étourderie ou excès de confiance -> Active le Feedback d'Autorégulation pour créer un choc cognitif.
-"""
-        # Sous-branche : Objectif de la session (Uniquement pour le Tuteur)
-        if "Mode A" in objectif_eleve:
-            prompt_systeme += """
-# LA "CONSTITUTION" PÉDAGOGIQUE - MODE A : ANCRAGE & MÉMORISATION (Testing Effect)
-- Règle de l'information minimale : 1 question = 1 savoir atomique.
-- Stratégie des leurres (Distracteurs) :
-  1. Confusion conceptuelle (terme proche, définition différente).
-  2. Erreur intuitive (bon sens apparent, mais faux).
-  3. Inversion causale (inverse la cause et l'effet).
-- Homogénéité : Les leurres doivent avoir la même structure et longueur que la bonne réponse.
-- Feedback : Explique toujours POURQUOI une réponse est juste ou fausse.
-"""
-            if niveau_eleve == "Novice":
-                prompt_systeme += """
-- Échafaudage (Novice) : Utilise EXCLUSIVEMENT des QCM avec les leurres ci-dessus. Laisse une ligne vide entre chaque choix.
-"""
-            else:
-                prompt_systeme += """
-- Échafaudage (Avancé) : Utilise EXCLUSIVEMENT le Rappel Libre. Pose une question directe sans choix.
-"""
-        
-        else:
-            prompt_systeme += """
-# LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
-- Séquençage : L'élève effectue cet exercice PENDANT l'étude, avec le document sous les yeux (à livre ouvert).
-- Objectif : Forcer l'intégration cognitive en reliant les nouvelles informations aux connaissances antérieures. Ce n'est pas un test de mémorisation.
-- Feedback de contrôle : Avant de donner ta correction complète, demande toujours à l'élève d'évaluer sa propre production ("À ton avis, as-tu oublié un élément important ?").
-
-# POSTURE TUTEUR COGNITIF (INFÉRENCE ET GÉNÉRATION)
-RÈGLE D'INFÉRENCE STRICTE : Bannis les questions littérales. Ne demande jamais de retrouver une information explicitement écrite. Force l'élève à déduire des liens (causaux, chronologiques) ou à cibler le "Pourquoi".
-
-MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente si non précisée et garde la jusqu'à la fin de la discussion) :
-1. Pré-test (Amorçage) : Pose 3 à 5 questions d'inférence ciblées AVANT la lecture complète.
-2. Auto-explication ciblée : Demande à l'élève de justifier une information ou une étape CORRECTE du document (ex: "Quelle hypothèse scientifique justifie ce calcul/ce choix ?"). Ne lui demande pas de justifier son propre raisonnement initial pour éviter d'ancrer ses erreurs.
-3. Résumé avec ses mots : Refuse la paraphrase littérale. Exige une réorganisation personnelle.
-4. Détection d'erreurs : Rédige un court paragraphe, calcul ou raisonnement contenant une erreur typique de la discipline, et force l'élève à inférer la règle violée.
-"""
-            if niveau_eleve == "Novice":
-                prompt_systeme += """
-# ÉCHAFAUDAGE NOVICE
-- Consignes très structurées : Impose 3 à 5 mots-clés OBLIGATOIRES du cours.
-- Détection d'erreurs : Indique précisément OÙ se trouve l'erreur dans ton texte, la seule tâche de l'élève est d'expliquer pourquoi c'est faux.
-- Support : Utilise des textes à trous pour guider l'inférence.
-"""
-            else:
-                prompt_systeme += """
-# ÉCHAFAUDAGE AVANCÉ
-- Consignes ouvertes : Pose des questions larges SANS fournir de mots-clés.
-- Détection d'erreurs : Ne dis pas où est l'erreur. L'élève doit chercher, identifier ET justifier l'erreur seul.
-"""
-
-    return prompt_systeme
-
-# ==========================================
-# FONCTIONS TECHNIQUES & EXTRACTION
-# ==========================================
-def initialiser_modele(api_key, niveau, objectif, strategie, attendus=None, matiere_nom="Non spécifiée", niveau_nom="Non spécifié"):
-    genai.configure(api_key=api_key)
-    instructions = generer_prompt_systeme(niveau, objectif, strategie, attendus, matiere_nom, niveau_nom)
-    
-    return genai.GenerativeModel(
-        model_name="gemini-3-flash-preview", 
-        system_instruction=instructions,
-        tools=[verifier_calcul_formel], 
-        generation_config=genai.GenerationConfig(
-            response_mime_type="application/json",
-            response_schema=ReflexionTuteur
-        )
-    )
-
-def extraire_texte_pdf(uploaded_file):
-    """Extrait l'intégralité du texte d'un fichier PDF page par page."""
-    texte_complet = ""
-    try:
-        pdf_reader = PyPDF2.PdfReader(uploaded_file)
-        nb_pages = len(pdf_reader.pages)
-        for num_page in range(nb_pages):
-            page = pdf_reader.pages[num_page]
-            texte_page = page.extract_text()
-            if texte_page:
-                texte_complet += f"\n--- Page {num_page + 1} ---\n{texte_page}"
-        return texte_complet
-    except Exception as e:
-        st.error(f"Erreur lors de la lecture du PDF : {e}")
+        return REFERENTIEL_COLLEGE.get(matiere, {}).get(niveau, None)
+    except Exception:
         return None
-
-def generer_contexte_optimise(nouvel_input):
-    contents = []
-    
-    # Injection systématique de la base de connaissances (cours intégral)
-    if st.session_state.texte_cours_integral:
-        contents.append({"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]})
-        contents.append({"role": "model", "parts": ["J'ai bien mémorisé l'intégralité de la base de connaissances. Je suis prêt à formuler mes questions en me basant strictement sur ce contenu."] })
-
-    # Ajout de l'historique conversationnel récent (en filtrant les données Meta pour l'historique Gemini)
-    messages_api = [m for m in st.session_state.messages if not m.get("isMeta")]
-    historique_recent = messages_api[-MAX_HISTORIQUE_MESSAGES:]
-    for msg in historique_recent:
-        contents.append({"role": msg["role"], "parts": [msg["content"]]})
-        
-    # Ajout de la nouvelle entrée de l'élève
-    contents.append({"role": "user", "parts": [nouvel_input]})
-    return contents
-
-def simuler_stream(texte):
-    """Simule un effet de frappe pour réduire l'impatience de l'élève."""
-    for mot in texte.split(" "):
-        yield mot + " "
-        time.sleep(0.02)
-
-# ==========================================
-# INTERFACE UTILISATEUR (UI)
-# ==========================================
-st.title("🦉 Réviser avec les sciences cognitives")
-st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
-
-with st.sidebar:
-    st.header("⚙️ Paramètres du cours")
-    actif = st.session_active = st.session_state.get("session_active", False)
-    
-    # Sélection du Cadre Institutionnel (ZPD) basé sur le dictionnaire importé
-    matieres_dispos = list(REFERENTIELS.keys()) if REFERENTIELS else ["Mathématiques", "Générique"]
-    matiere_choisie = st.selectbox("Matière :", matieres_dispos, disabled=actif)
-    
-    niveaux_scolaires = list(REFERENTIELS.get(matiere_choisie, {}).keys()) if REFERENTIELS else ["6ème", "5ème", "4ème", "3ème"]
-    niveau_scolaire = st.selectbox("Classe :", niveaux_scolaires, disabled=actif)
-    
-    st.divider()
-    
-    niv_e = st.radio("Ton niveau de maîtrise :", ["Novice", "Avancé"], disabled=actif)
-    obj_e = st.radio("Objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=actif)
-    
-    strat_v = "Classique"
-    if "Mode B" in obj_e:
-        s_display = st.radio("Stratégie de révision :", ["Classique", "Explique à un camarade"], disabled=actif)
-        strat_v = "Effet_Protege" if s_display == "Explique à un camarade" else "Classique"
-    
-    st.divider()
-    source = st.radio("Source du cours :", ["Fichier PDF", "Texte libre"], disabled=actif)
-    pdf_f = st.file_uploader("Charge ton cours (PDF)", type=["pdf"], disabled=actif) if source == "Fichier PDF" else None
-    txt_f = st.text_area("Colle ton texte de cours ici :", height=200, disabled=actif) if source == "Texte libre" else None
-    
-    st.divider()
-    mode_debug = st.checkbox("Activer le mode Debug (Métacognition de l'IA)", value=False, disabled=actif)
-    
-    pret_a_demarrer = (pdf_f is not None) or (txt_f is not None and len(txt_f.strip()) > 10)
-    
-    if st.button("🚀 Démarrer la session", disabled=actif or not pret_a_demarrer):
-        try:
-            api_key = st.secrets["GOOGLE_API_KEY"]
-            t_extrait = extraire_texte_pdf(pdf_f) if pdf_f else txt_f
-            
-            if t_extrait:
-                st.session_state.texte_cours_integral = t_extrait
-                st.session_state.api_key = api_key
-                st.session_state.niveau = niv_e
-                st.session_state.objectif = obj_e
-                st.session_state.strategie = strat_v
-                st.session_state.mode_debug = mode_debug
-                # Sauvegarde du contexte institutionnel
-                st.session_state.matiere_nom = matiere_choisie
-                st.session_state.niveau_nom = niveau_scolaire
-                # Extraction des limites ZPD depuis l'import Python
-                st.session_state.attendus_cours = REFERENTIELS.get(matiere_choisie, {}).get(niveau_scolaire, None)
-                st.session_state.session_active = True
-                st.rerun()
-            else:
-                st.stop()
-        except KeyError:
-            st.error("⚠️ La clé API est introuvable dans l'onglet 'Secrets' de Streamlit Cloud.")
-        except Exception as e:
-            st.error(f"Erreur : {e}")
-
-    if actif:
-        st.divider()
-        if st.button("🛑 Terminer et voir ma synthèse"): 
-            afficher_bilan()
-
-# --- ZONE DE DISCUSSION ORCHESTRÉE ---
-if st.session_state.get("session_active"):
-    modele = initialiser_modele(
-        st.session_state.api_key, 
-        st.session_state.niveau, 
-        st.session_state.objectif, 
-        st.session_state.strategie,
-        st.session_state.attendus_cours,
-        st.session_state.get("matiere_nom", "Non spécifiée"),
-        st.session_state.get("niveau_nom", "Non spécifié")
-    )
-    
-    # Affichage de l'historique dans l'UI
-    for msg in st.session_state.messages:
-        if msg.get("isMeta"):
-            if st.session_state.get("mode_debug", False):
-                with st.expander("🧠 Méta-cognition de l'IA (Debug)", expanded=False):
-                    st.markdown(f"**Diagnostic :** {msg.get('diagnostic', 'N/A')}")
-                    st.markdown(f"**Stratégie :** {msg.get('strategie', 'N/A')}")
-                    st.markdown(f"**Concept évalué :** {msg.get('concept_actuel_evalue', 'N/A')}")
-                    st.markdown(f"**Concepts restants :** {msg.get('liste_concepts_restants_du_cours', 'N/A')}")
-        else:
-            with st.chat_message(msg["role"]): 
-                st.markdown(msg["content"])
-            
-    # Amorçage (1ère question)
-    if len(st.session_state.messages) == 0:
-        with st.chat_message("model"):
-            with st.spinner("L'IA prépare sa stratégie pédagogique..."):
-                contexte = generer_contexte_optimise("Salut ! Je suis prêt, commence l'exercice sur le cours.")
-                reponse = modele.generate_content(contexte)
-                try:
-                    reflexion = ReflexionTuteur.model_validate_json(reponse.text)
-                    st.session_state.lettre_attendue = reflexion.lettre_attendue_qcm
-                    st.session_state.messages.append({
-                        "role": "model", "content": "", "isMeta": True, 
-                        "diagnostic": reflexion.diagnostic_interne,
-                        "strategie": reflexion.strategie_choisie,
-                        "concept_actuel_evalue": reflexion.concept_actuel_evalue,
-                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours
-                    })
-                    st.write_stream(simuler_stream(reflexion.reponse_visible))
-                    st.session_state.messages.append({"role": "model", "content": reflexion.reponse_visible})
-                except Exception as e:
-                    st.error(f"Erreur d'initialisation JSON : {e}")
-
-    # Interaction Élève -> Modèle
-    if query := st.chat_input("Ta réponse..."):
-        st.chat_message("user").markdown(query)
-        st.session_state.messages.append({"role": "user", "content": query})
-        
-        with st.chat_message("model"):
-            with st.spinner("Analyse cognitive en cours..."):
-                # 1. JUGE DÉTERMINISTE (REGEX QCM)
-                attendu = st.session_state.get("lettre_attendue", "NA")
-                consigne_juge = ""
-                if attendu in ["A", "B", "C", "D"]:
-                    trouve = re.findall(r'\b[A-Da-d]\b', query)
-                    if len(trouve) == 1:
-                        l_eleve = trouve[0].upper()
-                        if l_eleve == attendu:
-                            consigne_juge = f"\n\n<juge_deterministe>INTERVENTION SYMBOLIQUE : L'élève a choisi {l_eleve}. C'est JUSTE. Valide formellement.</juge_deterministe>"
-                        else:
-                            consigne_juge = f"\n\n<juge_deterministe>INTERVENTION SYMBOLIQUE : L'élève a choisi {l_eleve}. C'est FAUX (la bonne était {attendu}). Applique un feedback de processus strict.</juge_deterministe>"
-
-                contexte = generer_contexte_optimise(query + consigne_juge)
-                
-                # 2. APPEL IA (SYMPY TOOL CALLING)
-                res = modele.generate_content(contexte)
-                if res.candidates and res.candidates[0].content.parts:
-                    for part in res.candidates[0].content.parts:
-                        if part.function_call and part.function_call.name == "verifier_calcul_formel":
-                            fc = part.function_call
-                            args = type(fc.args).to_dict(fc.args) if hasattr(fc.args, 'items') else dict(fc.args)
-                            v_res = verifier_calcul_formel(args.get("expression_prof", ""), args.get("expression_eleve", ""))
-                            
-                            part_response = genai.protos.Part(function_response=genai.protos.FunctionResponse(name="verifier_calcul_formel", response=v_res))
-                            contexte.append(res.candidates[0].content)
-                            contexte.append({"role": "user", "parts": [part_response]})
-                            
-                            res = modele.generate_content(contexte)
-                            break
-
-                # 3. FILTRE EXÉCUTIF LOCAL (spaCy) ET AUTO-CORRECTION
-                try:
-                    reflexion = ReflexionTuteur.model_validate_json(res.text)
-                    texte_final = reflexion.reponse_visible
-                    
-                    est_valide, motif_rejet = agent_critique.analyser(texte_final)
-                    
-                    # Boucle de correction interne si surcharge cognitive ou aberration didactique
-                    if not est_valide:
-                        contexte.append(res.candidates[0].content)
-                        alerte = f"\n\n<alerte_inhibition>ATTENTION (INHIBITION SYMBOLIQUE) : {motif_rejet} Corrige le champ 'reponse_visible' en conséquence (Garde le format JSON strict).</alerte_inhibition>"
-                        contexte.append({"role": "user", "parts": [alerte]})
-                        
-                        res_corrige = modele.generate_content(contexte)
-                        reflexion = ReflexionTuteur.model_validate_json(res_corrige.text)
-                        texte_final = reflexion.reponse_visible
-
-                    st.session_state.lettre_attendue = reflexion.lettre_attendue_qcm
-                    st.session_state.messages.append({
-                        "role": "model", "content": "", "isMeta": True, 
-                        "diagnostic": reflexion.diagnostic_interne,
-                        "strategie": reflexion.strategie_choisie,
-                        "concept_actuel_evalue": reflexion.concept_actuel_evalue,
-                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours
-                    })
-                    
-                    st.write_stream(simuler_stream(texte_final))
-                    st.session_state.messages.append({"role": "model", "content": texte_final})
-                    
-                    if st.session_state.get("mode_debug"): st.rerun()
-                except Exception as e:
-                    st.error(f"Erreur lors du traitement JSON : {e}")
-                    # Fallback sécurité
-                    st.markdown("Oups, mon système de réflexion a eu un petit hoquet de formatage. Pourrais-tu reformuler ta réponse s'il te plaît ?")
