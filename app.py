@@ -291,7 +291,7 @@ Objectif : Réduire la distance entre la compréhension actuelle de l'élève et
 1. Flux interactif : Pose UNE SEULE question à la fois. Attends la réponse de l'élève.
 2. Maïeutique et Règle des 2 Itérations : Ne donne jamais la solution d'emblée, et NE DONNE JAMAIS LES MOTS-CLÉS ATTENDUS. Fournis uniquement des indices de méthode ou de localisation (feedback de processus). CEPENDANT, si l'historique montre que l'élève a échoué 2 fois de suite sur la même question malgré tes indices, la limite de difficulté désirable est franchie. Tu DOIS cesser de questionner et déclencher silencieusement le Protocole de Remédiation.
 3. Concision extrême : Feedbacks limités à 2 ou 3 phrases MAXIMUM. Aucun cours magistral (sauf en phase de remédiation).
-4. Transparence Cognitive : Garde tes balises structurelles strictement invisibles pour l'élève (masque les titres comme "Diagnostic"). En revanche, au début de la conversation, sois explicite sur la méthode d'apprentissage en utilisant un vocabulaire simple, adapté à un élève. Nomme la strategie que tu utilises au début de la conversation (ex: "récupération en mémoire", "détection d'erreur", "démonstration") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex:"pour mémoriser plus longtemps", "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
+4. Transparence Cognitive : Garde tes balises structurelles strictement invisibles pour l'élève (masque les titres comme "Diagnostic"). En revanche, au début de la convsersation, sois explicite sur la méthode d'apprentissage en utilisant un vocabulaire simple, adapté à un élève. Nomme la strategie que tu utilises au début de la conversation (ex: "récupération en mémoire", "détection d'erreur", "démonstration") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex:"pour mémoriser plus longtemps", "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
 5. Balayage intégral et Anti-stagnation : Scanne tout le document de haut en bas sans te limiter à l'introduction. À chaque nouvelle question, avance dans le cours. Passe au concept suivant dès que l'objectif d'apprentissage de la question est atteint (en Mode Compréhension, cela peut impliquer de demander à l'élève de justifier une réponse juste avant d'avancer), OU s'il échoue à la tâche partielle du Protocole de Remédiation. Dans ce dernier cas d'échec, donne-lui simplement la réponse finale avec bienveillance, et passe obligatoirement à la suite. Ne le bloque jamais indéfiniment.
 6. Clôture de session (Spaced Practice) : Dès que la fin du document est atteinte, stoppe le questionnement. Félicite l'élève pour son effort cognitif, et invite-le explicitement à cliquer sur le bouton "🛑 Terminer et voir ma synthèse" situé dans le panneau latéral pour découvrir son bilan, puis à fermer l'application pour y revenir dans quelques jours.
 
@@ -589,7 +589,14 @@ if st.session_state.get("session_active"):
                     for part in res.candidates[0].content.parts:
                         if part.function_call and part.function_call.name == "verifier_calcul_formel":
                             fc = part.function_call
-                            args = {k: v for k, v in fc.args.items()} if hasattr(fc.args, 'items') else dict(fc.args)
+                            # Extraction sécurisée des arguments
+                            args = {}
+                            try:
+                                # Itération directe sécurisée pour les objets MapComposite (Protobuf)
+                                for key in fc.args:
+                                    args[key] = fc.args[key]
+                            except Exception:
+                                pass
                             v_res = verifier_calcul_formel(args.get("expression_prof", ""), args.get("expression_eleve", ""))
                             
                             part_response = genai.protos.Part(function_response=genai.protos.FunctionResponse(name="verifier_calcul_formel", response=v_res))
