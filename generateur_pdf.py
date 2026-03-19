@@ -95,7 +95,7 @@ def generer_pdf_bytes(texte_bilan, matiere, niveau, objectif):
             pdf.set_font("helvetica", '', 11)
             pdf.set_text_color(50, 50, 50)
             contenu = ligne.split(":", 1)[1].strip()
-            pdf.multi_cell(0, 6, txt=f"  • {contenu}")
+            pdf.multi_cell(0, 6, txt=f"  - {contenu}")
             pdf.ln(4)
             
         # B. Détection : Erreurs
@@ -107,7 +107,7 @@ def generer_pdf_bytes(texte_bilan, matiere, niveau, objectif):
             pdf.set_font("helvetica", '', 11)
             pdf.set_text_color(50, 50, 50)
             contenu = ligne.split(":", 1)[1].strip()
-            pdf.multi_cell(0, 6, txt=f"  • {contenu}")
+            pdf.multi_cell(0, 6, txt=f"  - {contenu}")
             pdf.ln(4)
             
         # C. Détection : Le Piège
@@ -119,7 +119,7 @@ def generer_pdf_bytes(texte_bilan, matiere, niveau, objectif):
             pdf.set_font("helvetica", '', 11)
             pdf.set_text_color(50, 50, 50)
             contenu = ligne.split(":", 1)[1].strip()
-            pdf.multi_cell(0, 6, txt=f"  • {contenu}")
+            pdf.multi_cell(0, 6, txt=f"  - {contenu}")
             pdf.ln(4)
             
         # D. Détection : Prochaine Étape
@@ -131,7 +131,7 @@ def generer_pdf_bytes(texte_bilan, matiere, niveau, objectif):
             pdf.set_font("helvetica", '', 11)
             pdf.set_text_color(50, 50, 50)
             contenu = ligne.split(":", 1)[1].strip()
-            pdf.multi_cell(0, 6, txt=f"  • {contenu}")
+            pdf.multi_cell(0, 6, txt=f"  - {contenu}")
             pdf.ln(4)
             
         # E. Autre texte générique
