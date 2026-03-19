@@ -12,8 +12,9 @@ from sympy.parsing.sympy_parser import parse_expr, standard_transformations, imp
 from pydantic import BaseModel, Field
 import os
 
-# Import direct de votre module Python
+# Imports locaux
 import referentiels 
+from generateur_pdf import generer_pdf_bytes
 
 # ==========================================
 # CONFIGURATION DE LA PAGE & CSS
@@ -133,12 +134,10 @@ class AgentCritique:
 
     def analyser(self, texte_reponse):
         doc = self.nlp(texte_reponse)
-        # Mesure de la surcharge cognitive (Phrase de plus de 30 mots)
         phrases_longues = [sent.text for sent in doc.sents if len([t for t in sent if not t.is_punct]) > 30]
         if phrases_longues:
             return False, f"Surcharge cognitive détectée. Ta phrase est trop longue ({len([t for t in self.nlp(phrases_longues[0]) if not t.is_punct])} mots). Scinde tes idées en phrases plus courtes pour respecter la mémoire de travail de l'élève."
 
-        # Filtrage didactique (Blocage des grandeurs physiques négatives)
         risque_negatif = any(token.text.startswith('-') and token.pos_ == "NUM" for token in doc)
         if risque_negatif:
              for token in doc:
@@ -151,7 +150,7 @@ class AgentCritique:
 agent_critique = AgentCritique()
 
 # ==========================================
-# --- DIALOGUE BILAN FINAL & WOOCLAP ---
+# --- DIALOGUE BILAN FINAL & EXPORT PDF ---
 # ==========================================
 @st.dialog("📈 Ton Bilan de Révision", width="large")
 def afficher_bilan():
@@ -188,6 +187,27 @@ def afficher_bilan():
             try:
                 reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif ultra-concis selon tes instructions.")
                 st.success(reponse.text)
+                
+                # --- NOUVEAU BLOC : EXPORT PDF ---
+                st.divider()
+                st.markdown("### 📥 Conserver une trace de ta session")
+                st.write("Télécharge ce bilan en PDF pour pouvoir le relire dans quelques jours et planifier ta prochaine révision (Spaced Practice).")
+                
+                matiere_pdf = st.session_state.get("matiere_nom", "Non spécifiée")
+                niveau_pdf = st.session_state.get("niveau_nom", "Non spécifié")
+                objectif_pdf = st.session_state.get("objectif", "Non spécifié")
+                
+                pdf_bytes = generer_pdf_bytes(reponse.text, matiere_pdf, niveau_pdf, objectif_pdf)
+                
+                st.download_button(
+                    label="📄 Télécharger mon Bilan (PDF)",
+                    data=bytes(pdf_bytes),
+                    file_name=f"Bilan_Revision_{matiere_pdf}_{niveau_pdf}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                # -----------------------------------
+
                 st.divider()
                 st.markdown("### 📊 Évaluation de l'outil")
                 st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
@@ -271,7 +291,7 @@ Objectif : Réduire la distance entre la compréhension actuelle de l'élève et
 1. Flux interactif : Pose UNE SEULE question à la fois. Attends la réponse de l'élève.
 2. Maïeutique et Règle des 2 Itérations : Ne donne jamais la solution d'emblée, et NE DONNE JAMAIS LES MOTS-CLÉS ATTENDUS. Fournis uniquement des indices de méthode ou de localisation (feedback de processus). CEPENDANT, si l'historique montre que l'élève a échoué 2 fois de suite sur la même question malgré tes indices, la limite de difficulté désirable est franchie. Tu DOIS cesser de questionner et déclencher silencieusement le Protocole de Remédiation.
 3. Concision extrême : Feedbacks limités à 2 ou 3 phrases MAXIMUM. Aucun cours magistral (sauf en phase de remédiation).
-4. Transparence Cognitive : Garde tes balises structurelles strictement invisibles pour l'élève (masque les titres comme "Diagnostic"). En revanche, au début de la convsersation, sois explicite sur la méthode d'apprentissage en utilisant un vocabulaire simple, adapté à un élève. Nomme la strategie que tu utilises au début de la conversation (ex: "récupération en mémoire", "détection d'erreur", "démonstration") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex:"pour mémoriser plus longtemps", "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
+4. Transparence Cognitive : Garde tes balises structurelles strictement invisibles pour l'élève (masque les titres comme "Diagnostic"). En revanche, au début de la conversation, sois explicite sur la méthode d'apprentissage en utilisant un vocabulaire simple, adapté à un élève. Nomme la strategie que tu utilises au début de la conversation (ex: "récupération en mémoire", "détection d'erreur", "démonstration") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex:"pour mémoriser plus longtemps", "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
 5. Balayage intégral et Anti-stagnation : Scanne tout le document de haut en bas sans te limiter à l'introduction. À chaque nouvelle question, avance dans le cours. Passe au concept suivant dès que l'objectif d'apprentissage de la question est atteint (en Mode Compréhension, cela peut impliquer de demander à l'élève de justifier une réponse juste avant d'avancer), OU s'il échoue à la tâche partielle du Protocole de Remédiation. Dans ce dernier cas d'échec, donne-lui simplement la réponse finale avec bienveillance, et passe obligatoirement à la suite. Ne le bloque jamais indéfiniment.
 6. Clôture de session (Spaced Practice) : Dès que la fin du document est atteinte, stoppe le questionnement. Félicite l'élève pour son effort cognitif, et invite-le explicitement à cliquer sur le bouton "🛑 Terminer et voir ma synthèse" situé dans le panneau latéral pour découvrir son bilan, puis à fermer l'application pour y revenir dans quelques jours.
 
@@ -610,6 +630,5 @@ if st.session_state.get("session_active"):
                     
                     if st.session_state.get("mode_debug"): st.rerun()
                 except Exception as e:
-                    st.error(f"Erreur lors du traitement JSON : {e}")
-                    # Fallback sécurité
+                    # Message de repli strict et bienveillant pour préserver l'UX
                     st.markdown("Oups, mon système de réflexion a eu un petit hoquet de formatage. Pourrais-tu reformuler ta réponse s'il te plaît ?")
