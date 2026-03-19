@@ -12,6 +12,9 @@ from sympy.parsing.sympy_parser import parse_expr, standard_transformations, imp
 from pydantic import BaseModel, Field
 import os
 
+# Import direct de votre module Python
+import referentiels 
+
 # ==========================================
 # CONFIGURATION DE LA PAGE & CSS
 # ==========================================
@@ -40,21 +43,13 @@ if "lettre_attendue" not in st.session_state: st.session_state.lettre_attendue =
 if "attendus_cours" not in st.session_state: st.session_state.attendus_cours = None
 
 # ==========================================
-# CHARGEMENT DES RÉFÉRENTIELS ÉDUSCOL (JSON)
+# CONNEXION AU RÉFÉRENTIEL SÉCURISÉ
 # ==========================================
-@st.cache_data
-def charger_referentiels():
-    """Charge le fichier JSON contenant les limites de la ZPD par classe."""
-    if not os.path.exists('referentiels.json'):
-        return {}
-    try:
-        with open('referentiels.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        st.error(f"Erreur de lecture du JSON (Référentiels) : {e}")
-        return {}
-
-REFERENTIELS = charger_referentiels()
+try:
+    REFERENTIELS = referentiels.REFERENTIEL_COLLEGE
+except AttributeError:
+    st.error("Le dictionnaire REFERENTIEL_COLLEGE est introuvable dans le fichier referentiels.py.")
+    REFERENTIELS = {}
 
 # ==========================================
 # --- TUTORIEL D'ACCUEIL ---
@@ -443,11 +438,11 @@ with st.sidebar:
     st.header("⚙️ Paramètres du cours")
     actif = st.session_active = st.session_state.get("session_active", False)
     
-    # Sélection du Cadre Institutionnel (ZPD)
+    # Sélection du Cadre Institutionnel (ZPD) basé sur le dictionnaire importé
     matieres_dispos = list(REFERENTIELS.keys()) if REFERENTIELS else ["Mathématiques", "Générique"]
     matiere_choisie = st.selectbox("Matière :", matieres_dispos, disabled=actif)
     
-    niveaux_scolaires = list(REFERENTIELS.get(matiere_choisie, {}).keys()) if matiere_choisie in REFERENTIELS else ["6ème", "5ème", "4ème", "3ème"]
+    niveaux_scolaires = list(REFERENTIELS.get(matiere_choisie, {}).keys()) if REFERENTIELS else ["6ème", "5ème", "4ème", "3ème"]
     niveau_scolaire = st.selectbox("Classe :", niveaux_scolaires, disabled=actif)
     
     st.divider()
@@ -485,6 +480,7 @@ with st.sidebar:
                 # Sauvegarde du contexte institutionnel
                 st.session_state.matiere_nom = matiere_choisie
                 st.session_state.niveau_nom = niveau_scolaire
+                # Extraction des limites ZPD depuis l'import Python
                 st.session_state.attendus_cours = REFERENTIELS.get(matiere_choisie, {}).get(niveau_scolaire, None)
                 st.session_state.session_active = True
                 st.rerun()
@@ -515,7 +511,7 @@ if st.session_state.get("session_active"):
     # Affichage de l'historique dans l'UI
     for msg in st.session_state.messages:
         if msg.get("isMeta"):
-            if st.session_state.get("mode_debug"):
+            if st.session_state.get("mode_debug", False):
                 with st.expander("🧠 Méta-cognition de l'IA (Debug)", expanded=False):
                     st.markdown(f"**Diagnostic :** {msg.get('diagnostic', 'N/A')}")
                     st.markdown(f"**Stratégie :** {msg.get('strategie', 'N/A')}")
@@ -614,4 +610,6 @@ if st.session_state.get("session_active"):
                     
                     if st.session_state.get("mode_debug"): st.rerun()
                 except Exception as e:
-                    st.error(f"Erreur lors du formatage IA : {e}. Demande à l'élève de reformuler.")
+                    st.error(f"Erreur lors du traitement JSON : {e}")
+                    # Fallback sécurité
+                    st.markdown("Oups, mon système de réflexion a eu un petit hoquet de formatage. Pourrais-tu reformuler ta réponse s'il te plaît ?")
