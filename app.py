@@ -589,7 +589,7 @@ if st.session_state.get("session_active"):
                     for part in res.candidates[0].content.parts:
                         if part.function_call and part.function_call.name == "verifier_calcul_formel":
                             fc = part.function_call
-                            args = type(fc.args).to_dict(fc.args) if hasattr(fc.args, 'items') else dict(fc.args)
+                            args = {k: v for k, v in fc.args.items()} if hasattr(fc.args, 'items') else dict(fc.args)
                             v_res = verifier_calcul_formel(args.get("expression_prof", ""), args.get("expression_eleve", ""))
                             
                             part_response = genai.protos.Part(function_response=genai.protos.FunctionResponse(name="verifier_calcul_formel", response=v_res))
