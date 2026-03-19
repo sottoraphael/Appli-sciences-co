@@ -3,6 +3,8 @@ import streamlit.components.v1 as components
 import google.generativeai as genai
 import PyPDF2
 import time
+import json
+from pydantic import BaseModel, Field
 
 # ==========================================
 # CONFIGURATION DE LA PAGE & CSS
@@ -15,6 +17,7 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stButton>button { width: 100%; border-radius: 15px; font-weight: bold; }
+    .stChatMessage { border-radius: 15px; border: 1px solid #E2E8F0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -23,14 +26,11 @@ MAX_HISTORIQUE_MESSAGES = 6
 # ==========================================
 # GESTION DE L'ÉTAT DE SESSION (State)
 # ==========================================
-if "session_active" not in st.session_state:
-    st.session_state.session_active = False
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "texte_cours_integral" not in st.session_state:
-    st.session_state.texte_cours_integral = ""
-if "tutoriel_vu" not in st.session_state:
-    st.session_state.tutoriel_vu = False
+if "session_active" not in st.session_state: st.session_state.session_active = False
+if "messages" not in st.session_state: st.session_state.messages = []
+if "texte_cours_integral" not in st.session_state: st.session_state.texte_cours_integral = ""
+if "tutoriel_vu" not in st.session_state: st.session_state.tutoriel_vu = False
+if "lettre_attendue" not in st.session_state: st.session_state.lettre_attendue = "NA"
 
 # ==========================================
 # --- TUTORIEL D'ACCUEIL ---
@@ -61,6 +61,18 @@ def afficher_tutoriel():
         st.rerun()
 
 # ==========================================
+# SCHÉMAS PYDANTIC (MÉTACOGNITION IA)
+# ==========================================
+class ReflexionTuteur(BaseModel):
+    """Schéma imposant la réflexion avant l'action (Inhibition)."""
+    diagnostic_interne: str = Field(description="Analyse factuelle de la réponse de l'élève et vérification stricte de la faisabilité logique.")
+    lettre_attendue_qcm: str = Field(description="Si ta reponse_visible contient une nouvelle question QCM, indique ici UNIQUEMENT la lettre de la bonne réponse (A, B, C ou D). Sinon, écris 'NA'.")
+    concept_actuel_evalue: str = Field(description="Le concept précis du cours que tu es en train de faire travailler à l'élève dans ton message actuel.")
+    liste_concepts_restants_du_cours: str = Field(description="Analyse l'INTÉGRALITÉ du cours fourni. Écris une CHAÎNE DE CARACTÈRES UNIQUE (pas de tableau) listant les concepts majeurs qu'il te reste à tester ensuite. S'ils ont TOUS été testés, écris exactement le mot 'Aucun'.")
+    strategie_choisie: str = Field(description="Catégorisation stricte de l'intervention (ex: Feedback de Processus, Remédiation, Sacha-Question, etc.).")
+    reponse_visible: str = Field(description="Le texte final adressé à l'élève, respectant le format LaTeX et la Transparence Cognitive.")
+
+# ==========================================
 # --- DIALOGUE BILAN FINAL & WOOCLAP ---
 # ==========================================
 @st.dialog("📈 Ton Bilan de Révision", width="large")
@@ -72,22 +84,19 @@ def afficher_bilan():
             if st.session_state.texte_cours_integral:
                 historique_complet.extend([{"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]}, {"role": "model", "parts": ["Compris."] }])
             
-            for msg in st.session_state.messages:
+            # Filtre les messages de métacognition pour ne garder que le texte visible pour le bilan
+            messages_visibles = [m for m in st.session_state.messages if not m.get("isMeta")]
+            for msg in messages_visibles:
                 role = "user" if msg["role"] == "user" else "model"
                 historique_complet.append({"role": role, "parts": [msg["content"]]})
                 
-            # --- DÉBUT DU BLOC DE BILAN MÉTACOGNITIF DYNAMIQUE ---
-            # 1. On prépare la base commune (Acquis et Erreurs)
             instruction_metacognitive = """Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
-
             CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
-
             Structure obligatoirement ton bilan ainsi :
             1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir (très bref).
             2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois (1 phrase).
             """
 
-            # 2. On ajoute les conseils spécifiques selon le mode choisi (Le piège et l'étape "Maison")
             if "Mode A" in st.session_state.objectif:
                 instruction_metacognitive += """3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire le cours donne l'illusion de savoir (biais de fluence) et que seul l'effort de mémoire compte.
             4. 📝 Prochaine étape : Suggère en 1 courte phrase de faire à la maison exactement comme aujourd'hui : cacher son cours et forcer son cerveau à retrouver les informations sur une feuille blanche.
@@ -105,7 +114,6 @@ def afficher_bilan():
                 st.success(reponse.text)
                 
                 st.divider()
-                
                 st.markdown("### 📊 Évaluation de l'outil")
                 st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
                 
@@ -118,6 +126,7 @@ def afficher_bilan():
                     st.session_state.session_active = False
                     st.session_state.messages = []
                     st.session_state.texte_cours_integral = ""
+                    st.session_state.lettre_attendue = "NA"
                     st.rerun()
             except Exception as e:
                 st.error(f"Impossible de générer le bilan pour le moment : {e}")
@@ -125,32 +134,56 @@ def afficher_bilan():
         st.warning("Il faut d'abord discuter un peu avec le tuteur avant de pouvoir analyser tes réponses !")
 
 # ==========================================
-# 🛑 ZONE SANCTUAIRE : PROMPT SYSTÈME EXACT 🛑
+# 🛑 ZONE SANCTUAIRE : PROMPT SYSTÈME AVEC BIFURCATION STRICTE 🛑
 # ==========================================
 def generer_prompt_systeme(niveau_eleve, objectif_eleve, strategie_generative=None):
-    prompt_systeme = """# RÔLE ET MISSION
-Tu es un expert en ingénierie pédagogique cognitive et spécialiste EdTech.
-Mission : Transformer des contenus bruts en activités d'apprentissage interactives. Base-toi EXCLUSIVEMENT sur la "BASE DE CONNAISSANCES DU COURS" fournie au début de la conversation pour le fond.
-Objectif : Réduire la distance entre la compréhension actuelle de l'élève et la cible pédagogique, tout en développant sa métacognition.
-
-# ➗ GESTION DES NOTATIONS SCIENTIFIQUES ET MATHÉMATIQUES
+    # 1. SOCLE COMMUN (Règles intangibles)
+    prompt_systeme = """# ➗ GESTION DES NOTATIONS SCIENTIFIQUES ET MATHÉMATIQUES
 - L'élève ne dispose pas de clavier mathématique. Il saisira ses formules en texte brut (ex: "racine de x", "3/4", "x au carre").
 - Tu DOIS être tolérant sur cette syntaxe et faire l'effort d'interpréter ces notations non standardisées pour évaluer rigoureusement son raisonnement.
 - Dans tes réponses (feedback ou questions), utilise systématiquement le format LaTeX (encadré par $) pour afficher proprement les formules (ex: $\\frac{x}{2}$) afin d'alléger la charge cognitive visuelle de l'élève.
-
-# DIRECTIVES DE GUIDAGE (STRICTES)
-1. Flux interactif : Pose UNE SEULE question à la fois. Attends la réponse de l'élève.
-2. Maïeutique et Règle des 2 Itérations : Ne donne jamais la solution d'emblée, et NE DONNE JAMAIS LES MOTS-CLÉS ATTENDUS. Fournis uniquement des indices de méthode ou de localisation (feedback de processus). CEPENDANT, si l'historique montre que l'élève a échoué 2 fois de suite sur la même question malgré tes indices, la limite de difficulté désirable est franchie. Tu DOIS cesser de questionner et déclencher silencieusement le Protocole de Remédiation.
-3. Concision extrême : Feedbacks limités à 2 ou 3 phrases MAXIMUM. Aucun cours magistral (sauf en phase de remédiation).
-4. Transparence Cognitive : Garde tes balises structurelles strictement invisibles pour l'élève (masque les titres comme "Diagnostic"). En revanche, sois explicite sur la méthode d'apprentissage en utilisant un vocabulaire simple, adapté à un élève. Nomme la stratégie que tu utilises au début de la conversation (ex: "récupération en mémoire", "détection d'erreur", "démonstration") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex:"pour mémoriser plus longtemps", "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
-5. Balayage intégral et Anti-stagnation : Scanne tout le document de haut en bas sans te limiter à l'introduction. À chaque nouvelle question, avance dans le cours. Passe au concept suivant dès que l'objectif d'apprentissage de la question est atteint (en Mode Compréhension, cela peut impliquer de demander à l'élève de justifier une réponse juste avant d'avancer), OU s'il échoue à la tâche partielle du Protocole de Remédiation. Dans ce dernier cas d'échec, donne-lui simplement la réponse finale avec bienveillance, et passe obligatoirement à la suite. Ne le bloque jamais indéfiniment.
-6. Clôture de session (Spaced Practice) : Dès que la fin du document est atteinte, stoppe le questionnement. Félicite l'élève pour son effort cognitif, et invite-le explicitement à cliquer sur le bouton "🛑 Terminer et voir ma synthèse" situé dans le panneau latéral pour découvrir son bilan, puis à fermer l'application pour y revenir dans quelques jours.
 
 # 🛑 CONTRAINTES ET INTERDICTIONS (ANTI-PROMPTS)
 - Pas de jugement personnel sur le "Soi" : Ne dis jamais "Tu es nul" ou "Tu es brillant".
 - Pas de feedback stéréotypé vide ou immérité : Interdiction de dire juste "C'est juste/faux" sans explication factuelle, et évite les "Bravo !" vagues.
 - Pas de comparaison sociale : Ne compare jamais l'élève aux autres.
 - ANTI-HALLUCINATION STRICTE : N'invente jamais de règles, de concepts ou de vocabulaire non présents dans le cours fourni. Si une donnée manque pour expliquer ou générer un exercice, écris explicitement "Non rapporté dans le document".
+"""
+
+    # 2. BIFURCATION ARCHITECTURALE ABSOLUE
+    if strategie_generative == "Effet_Protege":
+        prompt_systeme += """
+# 🎭 RÔLE TEMPORAIRE : LE CAMARADE EN DIFFICULTÉ (EFFET PROTÉGÉ / PEER TUTORING)
+ATTENTION : Oublie ton rôle de tuteur expert. Tu es "Sacha", un élève qui a du mal à comprendre le cours.
+Ton but caché est d'obliger l'utilisateur à structurer sa pensée et vulgariser le concept.
+Tu n'es PAS un professeur, tu n'es PAS un expert EdTech, tu n'es PAS une IA.
+
+🛑 RÈGLES STRICTES DU JEU DE RÔLE :
+1. ANTI-RÉCITATION : N'utilise AUCUN terme technique avant l'utilisateur. Rejette le jargon ("C'est trop compliqué, on dirait le prof. Tu peux m'expliquer simplement ?").
+2. SCAFFOLDING NAÏF : Dès ta première intervention, explicite ta surcharge cognitive (« J'ai lu le cours mais tout s'embrouille, par quoi je dois commencer ? »). Ensuite, pose UNE SEULE question naïve à la fois. Si l'explication est trop longue, coupe-le ("Attends, tu vas trop vite. C'est quoi l'étape 1 ?").
+3. L'ERREUR INTENTIONNELLE : Injecte la confusion la plus classique que font les novices. Force l'utilisateur à démonter cette erreur logique.
+4. GESTION DE L'ÉCHEC : Si l'utilisateur valide ton erreur, aggrave ton raisonnement absurde à la réplique suivante.
+5. LIMITE DE BLOCAGE (2 itérations) : Si l'utilisateur échoue 2 fois de suite à t'expliquer ou tourne en rond, casse la boucle en simulant une trouvaille dans le cours : "Attends, j'ai regardé dans le manuel, ils disent que c'est [Solution du cours]. Mais du coup, comment on applique ça pour [Question similaire] ?"
+6. DÉCLIC ET ÉVALUATION INVERSÉE : Si l'utilisateur corrige ton erreur clairement, reformule avec ses mots. Valorise sa pédagogie en explicitant le déclic ("Ton exemple m'a débloqué parce qu'avant je confondais avec [X]"). Demande-lui une question piège pour te tester.
+
+# LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
+- Séquençage : L'utilisateur effectue cet exercice PENDANT l'étude, avec le document sous les yeux (à livre ouvert).
+- Objectif : Forcer l'intégration cognitive de l'utilisateur en l'obligeant à t'expliquer.
+"""
+    else:
+        prompt_systeme += """
+# RÔLE ET MISSION
+Tu es un expert en ingénierie pédagogique cognitive et spécialiste EdTech.
+Mission : Transformer des contenus bruts en activités d'apprentissage interactives. Base-toi EXCLUSIVEMENT sur la "BASE DE CONNAISSANCES DU COURS" fournie au début de la conversation pour le fond.
+Objectif : Réduire la distance entre la compréhension actuelle de l'élève et la cible pédagogique, tout en développant sa métacognition.
+
+# DIRECTIVES DE GUIDAGE (STRICTES)
+1. Flux interactif : Pose UNE SEULE question à la fois. Attends la réponse de l'élève.
+2. Maïeutique et Règle des 2 Itérations : Ne donne jamais la solution d'emblée, et NE DONNE JAMAIS LES MOTS-CLÉS ATTENDUS. Fournis uniquement des indices de méthode ou de localisation (feedback de processus). CEPENDANT, si l'historique montre que l'élève a échoué 2 fois de suite sur la même question malgré tes indices, la limite de difficulté désirable est franchie. Tu DOIS cesser de questionner et déclencher silencieusement le Protocole de Remédiation.
+3. Concision extrême : Feedbacks limités à 2 ou 3 phrases MAXIMUM. Aucun cours magistral (sauf en phase de remédiation).
+4. Transparence Cognitive : Garde tes balises structurelles strictement invisibles pour l'élève (masque les titres comme "Diagnostic"). En revanche, au début de la convsersation, sois explicite sur la méthode d'apprentissage en utilisant un vocabulaire simple, adapté à un élève. Nomme la strategie que tu utilises au début de la conversation (ex: "récupération en mémoire", "détection d'erreur", "démonstration") et justifie brièvement *pourquoi* elle est utile pour son cerveau (ex:"pour mémoriser plus longtemps", "pour éviter l'illusion de maîtrise", "pour forcer ton cerveau à faire des liens"). Ton texte visible doit rester naturel et conversationnel.
+5. Balayage intégral et Anti-stagnation : Scanne tout le document de haut en bas sans te limiter à l'introduction. À chaque nouvelle question, avance dans le cours. Passe au concept suivant dès que l'objectif d'apprentissage de la question est atteint (en Mode Compréhension, cela peut impliquer de demander à l'élève de justifier une réponse juste avant d'avancer), OU s'il échoue à la tâche partielle du Protocole de Remédiation. Dans ce dernier cas d'échec, donne-lui simplement la réponse finale avec bienveillance, et passe obligatoirement à la suite. Ne le bloque jamais indéfiniment.
+6. Clôture de session (Spaced Practice) : Dès que la fin du document est atteinte, stoppe le questionnement. Félicite l'élève pour son effort cognitif, et invite-le explicitement à cliquer sur le bouton "🛑 Terminer et voir ma synthèse" situé dans le panneau latéral pour découvrir son bilan, puis à fermer l'application pour y revenir dans quelques jours.
 
 # STRUCTURES D'INTERVENTION OBLIGATOIRES
 Pour rédiger ta réponse, tu dois formuler un paragraphe unique qui intègre implicitement l'une des trois structures suivantes, selon la situation :
@@ -180,24 +213,24 @@ Exemple de Feedback de Processus avec Transparence Cognitive :
 Exemple de Feedback d'Autorégulation attendu :
 "Tu as écrit que la Révolution a commencé en 1792. Regarde attentivement la chronologie dans ton document. Quel événement majeur de 1789 marque réellement le début de cette période ?"
 """
-
-    if niveau_eleve == "Novice":
-        prompt_systeme += """
+        # Sous-branche : Niveau de l'élève (Uniquement pour le Tuteur)
+        if niveau_eleve == "Novice":
+            prompt_systeme += """
 # 🌳 PROFIL ÉLÈVE : NOVICE
 L'élève construit sa compétence et est sujet à la surcharge cognitive.
 - INTERDICTION ABSOLUE : N'utilise JAMAIS le Feedback d'Autorégulation.
 - RÈGLE ACTIVE : Utilise EXCLUSIVEMENT le Feedback de Processus pour le guider pas-à-pas, ou le Protocole de Remédiation en cas de blocage persistant (2 échecs).
 """
-    else:
-        prompt_systeme += """
+        else:
+            prompt_systeme += """
 # 🌳 PROFIL ÉLÈVE : AVANCÉ
 L'élève possède les bases mais peut faire des étourderies.
 - Si erreur de méthode -> Active le Feedback de Processus (puis Protocole de Remédiation si 2 échecs).
 - Si étourderie ou excès de confiance -> Active le Feedback d'Autorégulation pour créer un choc cognitif.
 """
-
-    if "Mode A" in objectif_eleve:
-        prompt_systeme += """
+        # Sous-branche : Objectif de la session (Uniquement pour le Tuteur)
+        if "Mode A" in objectif_eleve:
+            prompt_systeme += """
 # LA "CONSTITUTION" PÉDAGOGIQUE - MODE A : ANCRAGE & MÉMORISATION (Testing Effect)
 - Règle de l'information minimale : 1 question = 1 savoir atomique.
 - Stratégie des leurres (Distracteurs) :
@@ -207,37 +240,22 @@ L'élève possède les bases mais peut faire des étourderies.
 - Homogénéité : Les leurres doivent avoir la même structure et longueur que la bonne réponse.
 - Feedback : Explique toujours POURQUOI une réponse est juste ou fausse.
 """
-        if niveau_eleve == "Novice":
-            prompt_systeme += """
+            if niveau_eleve == "Novice":
+                prompt_systeme += """
 - Échafaudage (Novice) : Utilise EXCLUSIVEMENT des QCM avec les leurres ci-dessus. Laisse une ligne vide entre chaque choix.
 """
-        else:
-            prompt_systeme += """
+            else:
+                prompt_systeme += """
 - Échafaudage (Avancé) : Utilise EXCLUSIVEMENT le Rappel Libre. Pose une question directe sans choix.
 """
-    else:
-        prompt_systeme += """
+        
+        else:
+            prompt_systeme += """
 # LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
 - Séquençage : L'élève effectue cet exercice PENDANT l'étude, avec le document sous les yeux (à livre ouvert).
 - Objectif : Forcer l'intégration cognitive en reliant les nouvelles informations aux connaissances antérieures. Ce n'est pas un test de mémorisation.
 - Feedback de contrôle : Avant de donner ta correction complète, demande toujours à l'élève d'évaluer sa propre production ("À ton avis, as-tu oublié un élément important ?").
-"""
-        if strategie_generative == "Effet_Protege":
-            prompt_systeme += """
-# 🎭 RÔLE TEMPORAIRE : LE CAMARADE EN DIFFICULTÉ (EFFET PROTÉGÉ / PEER TUTORING)
-ATTENTION : Oublie ton rôle de tuteur expert. Tu es "Sacha", un élève qui a du mal à comprendre le cours.
-Ton but caché est d'obliger l'utilisateur à structurer sa pensée et vulgariser le concept.
 
-🛑 RÈGLES STRICTES DU JEU DE RÔLE :
-1. ANTI-RÉCITATION : N'utilise AUCUN terme technique avant l'utilisateur. Rejette le jargon ("C'est trop compliqué, on dirait le prof. Tu peux m'expliquer simplement ?").
-2. SCAFFOLDING : Dès ta première intervention, explicite ta surcharge cognitive (« J'ai lu le cours mais tout s'embrouille, par quoi je dois commencer ? »). Ensuite, pose UNE SEULE question naïve à la fois. Si l'explication est trop longue, coupe-le ("Attends, tu vas trop vite. C'est quoi l'étape 1 ?").
-3. L'ERREUR INTENTIONNELLE : Injecte la confusion la plus classique que font les novices. Force l'utilisateur à démonter cette erreur logique.
-4. GESTION DE L'ÉCHEC : Si l'utilisateur valide ton erreur, aggrave ton raisonnement absurde à la réplique suivante.
-5. LIMITE DE BLOCAGE (2 itérations) : Si l'utilisateur échoue 2 fois de suite à t'expliquer ou tourne en rond, casse la boucle en simulant une trouvaille dans le cours : "Attends, j'ai regardé dans le manuel, ils disent que c'est [Solution du cours]. Mais du coup, comment on applique ça pour [Question similaire] ?"
-6. DÉCLIC ET ÉVALUATION INVERSÉE : Si l'utilisateur corrige ton erreur clairement, reformule avec ses mots. Valorise sa pédagogie en explicitant le déclic ("Ton exemple m'a débloqué parce qu'avant je confondais avec [X]"). Demande-lui une question piège pour te tester.
-"""
-        else:
-            prompt_systeme += """
 # POSTURE TUTEUR COGNITIF (INFÉRENCE ET GÉNÉRATION)
 RÈGLE D'INFÉRENCE STRICTE : Bannis les questions littérales. Ne demande jamais de retrouver une information explicitement écrite. Force l'élève à déduire des liens (causaux, chronologiques) ou à cibler le "Pourquoi".
 
@@ -247,15 +265,15 @@ MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente si non précisée et 
 3. Résumé avec ses mots : Refuse la paraphrase littérale. Exige une réorganisation personnelle.
 4. Détection d'erreurs : Rédige un court paragraphe, calcul ou raisonnement contenant une erreur typique de la discipline, et force l'élève à inférer la règle violée.
 """
-        if niveau_eleve == "Novice" and strategie_generative != "Effet_Protege":
-            prompt_systeme += """
+            if niveau_eleve == "Novice":
+                prompt_systeme += """
 # ÉCHAFAUDAGE NOVICE
 - Consignes très structurées : Impose 3 à 5 mots-clés OBLIGATOIRES du cours.
 - Détection d'erreurs : Indique précisément OÙ se trouve l'erreur dans ton texte, la seule tâche de l'élève est d'expliquer pourquoi c'est faux.
 - Support : Utilise des textes à trous pour guider l'inférence.
 """
-        elif niveau_eleve != "Novice" and strategie_generative != "Effet_Protege":
-            prompt_systeme += """
+            else:
+                prompt_systeme += """
 # ÉCHAFAUDAGE AVANCÉ
 - Consignes ouvertes : Pose des questions larges SANS fournir de mots-clés.
 - Détection d'erreurs : Ne dis pas où est l'erreur. L'élève doit chercher, identifier ET justifier l'erreur seul.
@@ -264,14 +282,20 @@ MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente si non précisée et 
     return prompt_systeme
 
 # ==========================================
-# FONCTIONS TECHNIQUES & EXTRACTION PDF
+# FONCTIONS TECHNIQUES & EXTRACTION
 # ==========================================
 def initialiser_modele(api_key, niveau, objectif, strategie):
     genai.configure(api_key=api_key)
     instructions = generer_prompt_systeme(niveau, objectif, strategie)
+    
+    # Intégration stricte de la Chaîne de Pensée via Structured Outputs (JSON)
     return genai.GenerativeModel(
         model_name="gemini-3-flash-preview", 
-        system_instruction=instructions
+        system_instruction=instructions,
+        generation_config=genai.GenerationConfig(
+            response_mime_type="application/json",
+            response_schema=ReflexionTuteur
+        )
     )
 
 def extraire_texte_pdf(uploaded_file):
@@ -298,8 +322,9 @@ def generer_contexte_optimise(nouvel_input):
         contents.append({"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]})
         contents.append({"role": "model", "parts": ["J'ai bien mémorisé l'intégralité de la base de connaissances. Je suis prêt à formuler mes questions en me basant strictement sur ce contenu."]})
 
-    # Ajout de l'historique conversationnel récent
-    historique_recent = st.session_state.messages[-MAX_HISTORIQUE_MESSAGES:]
+    # Ajout de l'historique conversationnel récent (en filtrant les données Meta pour l'historique Gemini)
+    messages_api = [m for m in st.session_state.messages if not m.get("isMeta")]
+    historique_recent = messages_api[-MAX_HISTORIQUE_MESSAGES:]
     for msg in historique_recent:
         contents.append({"role": msg["role"], "parts": [msg["content"]]})
         
@@ -307,13 +332,11 @@ def generer_contexte_optimise(nouvel_input):
     contents.append({"role": "user", "parts": [nouvel_input]})
     return contents
 
-def extraire_texte_stream(reponse):
-    for chunk in reponse:
-        try:
-            if chunk.text:
-                yield chunk.text
-        except Exception:
-            pass
+def simuler_stream(texte):
+    """Simule un effet de frappe pour réduire l'impatience de l'élève (remplace le stream natif incompatible avec le JSON)."""
+    for mot in texte.split(" "):
+        yield mot + " "
+        time.sleep(0.02)
 
 # ==========================================
 # INTERFACE UTILISATEUR (UI)
@@ -355,14 +378,15 @@ with st.sidebar:
         txt_input = st.text_area("Colle ton texte de cours ici :", height=200, disabled=session_en_cours, placeholder="Ex: La mitochondrie est l'organite responsable de la respiration cellulaire...")
         uploaded_file = None
     
+    st.divider()
+    mode_debug = st.checkbox("Activer le mode Debug (Métacognition de l'IA)", value=False, disabled=session_en_cours)
+    
     pret_a_demarrer = uploaded_file is not None or (txt_input is not None and len(txt_input.strip()) > 10)
     
     if st.button("🚀 Démarrer la session", disabled=session_en_cours or not pret_a_demarrer):
         try:
             api_key = st.secrets["GOOGLE_API_KEY"]
-            genai.configure(api_key=api_key)
             
-            # Traitement dynamique du contenu textuel au démarrage
             if uploaded_file:
                 with st.spinner("⏳ Extraction du contenu complet de ton document..."):
                     texte_extrait = extraire_texte_pdf(uploaded_file)
@@ -377,6 +401,7 @@ with st.sidebar:
             st.session_state.niveau = niveau_eleve
             st.session_state.objectif = objectif_eleve
             st.session_state.strategie = strategie_generative_val
+            st.session_state.mode_debug = mode_debug
             st.session_state.session_active = True
             st.rerun()
         except KeyError:
@@ -389,22 +414,56 @@ with st.sidebar:
         if st.button("🛑 Terminer et voir ma synthèse"):
             afficher_bilan()
 
-# --- ZONE DE DISCUSSION ---
+# --- ZONE DE DISCUSSION ORCHESTRÉE ---
 if st.session_state.session_active:
     modele = initialiser_modele(st.session_state.api_key, st.session_state.niveau, st.session_state.objectif, st.session_state.strategie)
     
+    # Affichage de l'historique dans l'UI
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        if msg.get("isMeta"):
+            if st.session_state.get("mode_debug", False):
+                with st.expander("🧠 Méta-cognition de l'IA (Debug)", expanded=False):
+                    st.markdown(f"**Diagnostic :** {msg.get('diagnostic', 'N/A')}")
+                    st.markdown(f"**Stratégie :** {msg.get('strategie', 'N/A')}")
+                    st.markdown(f"**Concept évalué :** {msg.get('concept_actuel_evalue', 'N/A')}")
+                    st.markdown(f"**Concepts restants :** {msg.get('liste_concepts_restants_du_cours', 'N/A')}")
+        else:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
             
     # Amorçage (1ère question)
     if len(st.session_state.messages) == 0:
         with st.chat_message("model"):
-            with st.spinner("Je prépare l'exercice..."):
+            with st.spinner("L'IA prépare sa stratégie pédagogique..."):
                 contexte = generer_contexte_optimise("Salut ! Je suis prêt, commence l'exercice sur le cours.")
-                reponse_stream = modele.generate_content(contexte, stream=True)
-                reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
-                st.session_state.messages.append({"role": "model", "content": reponse_complete})
+                reponse = modele.generate_content(contexte)
+                
+                try:
+                    reflexion = ReflexionTuteur.model_validate_json(reponse.text)
+                    texte_final = reflexion.reponse_visible
+                    
+                    # Enregistrement de la métacognition
+                    st.session_state.messages.append({
+                        "role": "model",
+                        "content": "",
+                        "diagnostic": reflexion.diagnostic_interne,
+                        "strategie": reflexion.strategie_choisie,
+                        "concept_actuel_evalue": reflexion.concept_actuel_evalue,
+                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours,
+                        "isMeta": True
+                    })
+                    
+                    if st.session_state.get("mode_debug", False):
+                        with st.expander("🧠 Méta-cognition de l'IA (Debug)", expanded=True):
+                            st.markdown(f"**Diagnostic :** {reflexion.diagnostic_interne}")
+                            st.markdown(f"**Stratégie :** {reflexion.strategie_choisie}")
+                            st.markdown(f"**Concept évalué :** {reflexion.concept_actuel_evalue}")
+                            st.markdown(f"**Concepts restants :** {reflexion.liste_concepts_restants_du_cours}")
+                            
+                    reponse_complete = st.write_stream(simuler_stream(texte_final))
+                    st.session_state.messages.append({"role": "model", "content": reponse_complete})
+                except Exception as e:
+                    st.error(f"Erreur d'initialisation JSON : {e}")
 
     # Boucle d'interaction
     if prompt := st.chat_input("Écris ta réponse ici..."):
@@ -413,20 +472,37 @@ if st.session_state.session_active:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("model"):
-            with st.spinner("Analyse de ta réponse..."):
+            with st.spinner("L'IA réfléchit (Analyse et diagnostic en cours)..."):
                 contexte = generer_contexte_optimise(prompt)
-                reponse_stream = modele.generate_content(contexte, stream=True)
+                reponse = modele.generate_content(contexte)
                 
-                # Gestion sécurisée du streaming
-                reponse_complete = ""
                 try:
-                    reponse_complete = st.write_stream(extraire_texte_stream(reponse_stream))
-                except Exception as e:
-                    # Fallback si le stream échoue
-                    reponse_complete = reponse_stream.text
-                    st.markdown(reponse_complete)
+                    # Parsing du JSON natif renvoyé par Gemini
+                    reflexion = ReflexionTuteur.model_validate_json(reponse.text)
+                    texte_final = reflexion.reponse_visible
                     
-        st.session_state.messages.append({"role": "model", "content": reponse_complete})
+                    # Enregistrement de la métacognition
+                    st.session_state.messages.append({
+                        "role": "model",
+                        "content": "",
+                        "diagnostic": reflexion.diagnostic_interne,
+                        "strategie": reflexion.strategie_choisie,
+                        "concept_actuel_evalue": reflexion.concept_actuel_evalue,
+                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours,
+                        "isMeta": True
+                    })
+                    
+                    if st.session_state.get("mode_debug", False):
+                        with st.expander("🧠 Méta-cognition de l'IA (Debug)", expanded=True):
+                            st.markdown(f"**Diagnostic :** {reflexion.diagnostic_interne}")
+                            st.markdown(f"**Stratégie :** {reflexion.strategie_choisie}")
+                            st.markdown(f"**Concept évalué :** {reflexion.concept_actuel_evalue}")
+                            st.markdown(f"**Concepts restants :** {reflexion.liste_concepts_restants_du_cours}")
 
-else:
-    st.info("👈 Choisis tes paramètres et donne-moi ton cours pour commencer !")
+                    reponse_complete = st.write_stream(simuler_stream(texte_final))
+                    st.session_state.messages.append({"role": "model", "content": reponse_complete})
+                
+                except Exception as e:
+                    st.error(f"Erreur lors du traitement JSON : {e}")
+                    # Fallback sécurité
+                    st.markdown("Oups, mon système de réflexion a eu un petit hoquet de formatage. Pourrais-tu reformuler ta réponse s'il te plaît ?")
