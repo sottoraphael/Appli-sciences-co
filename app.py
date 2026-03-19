@@ -4,7 +4,13 @@ import google.generativeai as genai
 import PyPDF2
 import time
 import json
+import re
+import sys
+import subprocess
+import sympy as sp
+from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 from pydantic import BaseModel, Field
+import os
 
 # ==========================================
 # CONFIGURATION DE LA PAGE & CSS
@@ -31,6 +37,24 @@ if "messages" not in st.session_state: st.session_state.messages = []
 if "texte_cours_integral" not in st.session_state: st.session_state.texte_cours_integral = ""
 if "tutoriel_vu" not in st.session_state: st.session_state.tutoriel_vu = False
 if "lettre_attendue" not in st.session_state: st.session_state.lettre_attendue = "NA"
+if "attendus_cours" not in st.session_state: st.session_state.attendus_cours = None
+
+# ==========================================
+# CHARGEMENT DES RÉFÉRENTIELS ÉDUSCOL (JSON)
+# ==========================================
+@st.cache_data
+def charger_referentiels():
+    """Charge le fichier JSON contenant les limites de la ZPD par classe."""
+    if not os.path.exists('referentiels.json'):
+        return {}
+    try:
+        with open('referentiels.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Erreur de lecture du JSON (Référentiels) : {e}")
+        return {}
+
+REFERENTIELS = charger_referentiels()
 
 # ==========================================
 # --- TUTORIEL D'ACCUEIL ---
@@ -60,6 +84,9 @@ def afficher_tutoriel():
         st.session_state.tutoriel_vu = True
         st.rerun()
 
+if not st.session_state.tutoriel_vu:
+    afficher_tutoriel()
+
 # ==========================================
 # SCHÉMAS PYDANTIC (MÉTACOGNITION IA)
 # ==========================================
@@ -73,6 +100,62 @@ class ReflexionTuteur(BaseModel):
     reponse_visible: str = Field(description="Le texte final adressé à l'élève, respectant le format LaTeX et la Transparence Cognitive.")
 
 # ==========================================
+# DÉLÉGATION NEURO-SYMBOLIQUE (SYMPY)
+# ==========================================
+def verifier_calcul_formel(expression_prof: str, expression_eleve: str) -> dict:
+    """Vérifie l'exactitude mathématique d'une réponse élève par rapport à une solution."""
+    try:
+        transformations = (standard_transformations + (implicit_multiplication_application,))
+        exp_p_str = str(expression_prof).replace('^', '**').replace(',', '.')
+        exp_e_str = str(expression_eleve).replace('^', '**').replace(',', '.')
+        
+        exp_p = parse_expr(exp_p_str, transformations=transformations)
+        exp_e = parse_expr(exp_e_str, transformations=transformations)
+        
+        est_valide = sp.simplify(exp_p - exp_e) == 0
+        return {"est_valide": bool(est_valide), "forme_simplifiee_eleve": str(exp_e)}
+    except Exception as e:
+        return {"erreur": f"Syntaxe non reconnue par le moteur formel : {str(e)}"}
+
+# ==========================================
+# FILTRE EXÉCUTIF LOCAL (spaCy)
+# ==========================================
+@st.cache_resource
+def charger_modele_nlp():
+    """Charge le modèle linguistique de base (mis en cache pour performance)."""
+    try:
+        import spacy
+        return spacy.load("fr_core_news_sm")
+    except OSError:
+        subprocess.run([sys.executable, "-m", "spacy", "download", "fr_core_news_sm"], check=True)
+        import spacy
+        return spacy.load("fr_core_news_sm")
+
+class AgentCritique:
+    """Filtre exécutif pour limiter la charge cognitive extrinsèque."""
+    def __init__(self):
+        self.nlp = charger_modele_nlp()
+
+    def analyser(self, texte_reponse):
+        doc = self.nlp(texte_reponse)
+        # Mesure de la surcharge cognitive (Phrase de plus de 30 mots)
+        phrases_longues = [sent.text for sent in doc.sents if len([t for t in sent if not t.is_punct]) > 30]
+        if phrases_longues:
+            return False, f"Surcharge cognitive détectée. Ta phrase est trop longue ({len([t for t in self.nlp(phrases_longues[0]) if not t.is_punct])} mots). Scinde tes idées en phrases plus courtes pour respecter la mémoire de travail de l'élève."
+
+        # Filtrage didactique (Blocage des grandeurs physiques négatives)
+        risque_negatif = any(token.text.startswith('-') and token.pos_ == "NUM" for token in doc)
+        if risque_negatif:
+             for token in doc:
+                 if token.text.startswith('-') and token.pos_ == "NUM":
+                     if token.i + 1 < len(doc) and doc[token.i + 1].pos_ == "NOUN":
+                         return False, "Aberration didactique détectée. On ne peut pas posséder une quantité négative d'objets physiques (ex: pommes). Adapte ton analogie pour les relatifs (utilise la température, les dettes, ou l'ascenseur)."
+
+        return True, ""
+
+agent_critique = AgentCritique()
+
+# ==========================================
 # --- DIALOGUE BILAN FINAL & WOOCLAP ---
 # ==========================================
 @st.dialog("📈 Ton Bilan de Révision", width="large")
@@ -80,11 +163,9 @@ def afficher_bilan():
     if len(st.session_state.messages) > 1:
         with st.spinner("Analyse métacognitive en cours..."):
             historique_complet = []
-            
             if st.session_state.texte_cours_integral:
                 historique_complet.extend([{"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]}, {"role": "model", "parts": ["Compris."] }])
             
-            # Filtre les messages de métacognition pour ne garder que le texte visible pour le bilan
             messages_visibles = [m for m in st.session_state.messages if not m.get("isMeta")]
             for msg in messages_visibles:
                 role = "user" if msg["role"] == "user" else "model"
@@ -112,21 +193,18 @@ def afficher_bilan():
             try:
                 reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif ultra-concis selon tes instructions.")
                 st.success(reponse.text)
-                
                 st.divider()
                 st.markdown("### 📊 Évaluation de l'outil")
                 st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
-                
                 iframe_wooclap = """<iframe allowfullscreen frameborder="0" height="100%" mozallowfullscreen src="https://app.wooclap.com/FBXMBG/questionnaires/69ad313cc7cb13027e159133" style="min-height: 550px; min-width: 300px" width="100%"></iframe>"""
                 components.html(iframe_wooclap, height=580)
-                
                 st.divider()
-                
                 if st.button("🔄 J'ai terminé, recommencer une nouvelle session", type="primary"):
                     st.session_state.session_active = False
                     st.session_state.messages = []
                     st.session_state.texte_cours_integral = ""
                     st.session_state.lettre_attendue = "NA"
+                    st.session_state.attendus_cours = None
                     st.rerun()
             except Exception as e:
                 st.error(f"Impossible de générer le bilan pour le moment : {e}")
@@ -136,9 +214,26 @@ def afficher_bilan():
 # ==========================================
 # 🛑 ZONE SANCTUAIRE : PROMPT SYSTÈME AVEC BIFURCATION STRICTE 🛑
 # ==========================================
-def generer_prompt_systeme(niveau_eleve, objectif_eleve, strategie_generative=None):
+def generer_prompt_systeme(niveau_eleve, objectif_eleve, strategie_generative=None, attendus=None, matiere_nom="Non spécifiée", niveau_nom="Non spécifié"):
+    prompt_systeme = ""
+
+    # INJECTION DU CADRE INSTITUTIONNEL (ZPD)
+    if attendus:
+        notions = "\n- ".join(attendus.get('notions_cles', ['Non rapporté']))
+        vocabulaire = ", ".join(attendus.get('vocabulaire_exigible', ['Non rapporté']))
+        limites = "\n- ".join(attendus.get('limites_zpd', ['Aucune limite spécifiée']))
+        
+        prompt_systeme += f"""# CADRE INSTITUTIONNEL (ZONE PROXIMALE DE DÉVELOPPEMENT)
+Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter toute surcharge cognitive :
+- MATIÈRE : {matiere_nom} ({niveau_nom})
+- NOTIONS CLÉS AUTORISÉES : {notions}
+- VOCABULAIRE EXIGIBLE (À privilégier) : {vocabulaire}
+- LIMITES STRICTES (HORS-PROGRAMME ABSOLU) : {limites}
+
+"""
+
     # 1. SOCLE COMMUN (Règles intangibles)
-    prompt_systeme = """# ➗ GESTION DES NOTATIONS SCIENTIFIQUES ET MATHÉMATIQUES
+    prompt_systeme += """# ➗ GESTION DES NOTATIONS SCIENTIFIQUES ET MATHÉMATIQUES
 - L'élève ne dispose pas de clavier mathématique. Il saisira ses formules en texte brut (ex: "racine de x", "3/4", "x au carre").
 - Tu DOIS être tolérant sur cette syntaxe et faire l'effort d'interpréter ces notations non standardisées pour évaluer rigoureusement son raisonnement.
 - Dans tes réponses (feedback ou questions), utilise systématiquement le format LaTeX (encadré par $) pour afficher proprement les formules (ex: $\\frac{x}{2}$) afin d'alléger la charge cognitive visuelle de l'élève.
@@ -284,14 +379,14 @@ MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente si non précisée et 
 # ==========================================
 # FONCTIONS TECHNIQUES & EXTRACTION
 # ==========================================
-def initialiser_modele(api_key, niveau, objectif, strategie):
+def initialiser_modele(api_key, niveau, objectif, strategie, attendus=None, matiere_nom="Non spécifiée", niveau_nom="Non spécifié"):
     genai.configure(api_key=api_key)
-    instructions = generer_prompt_systeme(niveau, objectif, strategie)
+    instructions = generer_prompt_systeme(niveau, objectif, strategie, attendus, matiere_nom, niveau_nom)
     
-    # Intégration stricte de la Chaîne de Pensée via Structured Outputs (JSON)
     return genai.GenerativeModel(
         model_name="gemini-3-flash-preview", 
         system_instruction=instructions,
+        tools=[verifier_calcul_formel], 
         generation_config=genai.GenerationConfig(
             response_mime_type="application/json",
             response_schema=ReflexionTuteur
@@ -320,7 +415,7 @@ def generer_contexte_optimise(nouvel_input):
     # Injection systématique de la base de connaissances (cours intégral)
     if st.session_state.texte_cours_integral:
         contents.append({"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]})
-        contents.append({"role": "model", "parts": ["J'ai bien mémorisé l'intégralité de la base de connaissances. Je suis prêt à formuler mes questions en me basant strictement sur ce contenu."]})
+        contents.append({"role": "model", "parts": ["J'ai bien mémorisé l'intégralité de la base de connaissances. Je suis prêt à formuler mes questions en me basant strictement sur ce contenu."] })
 
     # Ajout de l'historique conversationnel récent (en filtrant les données Meta pour l'historique Gemini)
     messages_api = [m for m in st.session_state.messages if not m.get("isMeta")]
@@ -333,7 +428,7 @@ def generer_contexte_optimise(nouvel_input):
     return contents
 
 def simuler_stream(texte):
-    """Simule un effet de frappe pour réduire l'impatience de l'élève (remplace le stream natif incompatible avec le JSON)."""
+    """Simule un effet de frappe pour réduire l'impatience de l'élève."""
     for mot in texte.split(" "):
         yield mot + " "
         time.sleep(0.02)
@@ -344,91 +439,90 @@ def simuler_stream(texte):
 st.title("🦉 Réviser avec les sciences cognitives")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
-if not st.session_state.tutoriel_vu:
-    afficher_tutoriel()
-
-# --- PANNEAU LATÉRAL ---
 with st.sidebar:
-    st.header("⚙️ Paramètres")
-    session_en_cours = st.session_state.session_active
+    st.header("⚙️ Paramètres du cours")
+    actif = st.session_active = st.session_state.get("session_active", False)
     
-    niveau_eleve = st.radio("Ton niveau :", ["Novice", "Avancé"], disabled=session_en_cours)
-    objectif_eleve = st.radio("Ton objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=session_en_cours)
+    # Sélection du Cadre Institutionnel (ZPD)
+    matieres_dispos = list(REFERENTIELS.keys()) if REFERENTIELS else ["Mathématiques", "Générique"]
+    matiere_choisie = st.selectbox("Matière :", matieres_dispos, disabled=actif)
     
-    strat_display = "Classique"
-    strategie_generative_val = "Classique"
-    
-    if "Mode B" in objectif_eleve:
-        strat_display = st.radio(
-            "Stratégie de révision :", 
-            ["Classique", "Explique à un camarade"], 
-            disabled=session_en_cours
-        )
-        if strat_display == "Explique à un camarade":
-            strategie_generative_val = "Effet_Protege"
-
-    st.divider()
-    
-    source_type = st.radio("Source du cours :", ["Fichier PDF", "Texte libre"], disabled=session_en_cours)
-    
-    if source_type == "Fichier PDF":
-        uploaded_file = st.file_uploader("Charge ton cours (PDF)", type=["pdf"], disabled=session_en_cours)
-        txt_input = None
-    else:
-        txt_input = st.text_area("Colle ton texte de cours ici :", height=200, disabled=session_en_cours, placeholder="Ex: La mitochondrie est l'organite responsable de la respiration cellulaire...")
-        uploaded_file = None
+    niveaux_scolaires = list(REFERENTIELS.get(matiere_choisie, {}).keys()) if matiere_choisie in REFERENTIELS else ["6ème", "5ème", "4ème", "3ème"]
+    niveau_scolaire = st.selectbox("Classe :", niveaux_scolaires, disabled=actif)
     
     st.divider()
-    mode_debug = st.checkbox("Activer le mode Debug (Métacognition de l'IA)", value=False, disabled=session_en_cours)
     
-    pret_a_demarrer = uploaded_file is not None or (txt_input is not None and len(txt_input.strip()) > 10)
+    niv_e = st.radio("Ton niveau de maîtrise :", ["Novice", "Avancé"], disabled=actif)
+    obj_e = st.radio("Objectif :", ["Mode A : Mémorisation", "Mode B : Compréhension"], disabled=actif)
     
-    if st.button("🚀 Démarrer la session", disabled=session_en_cours or not pret_a_demarrer):
+    strat_v = "Classique"
+    if "Mode B" in obj_e:
+        s_display = st.radio("Stratégie de révision :", ["Classique", "Explique à un camarade"], disabled=actif)
+        strat_v = "Effet_Protege" if s_display == "Explique à un camarade" else "Classique"
+    
+    st.divider()
+    source = st.radio("Source du cours :", ["Fichier PDF", "Texte libre"], disabled=actif)
+    pdf_f = st.file_uploader("Charge ton cours (PDF)", type=["pdf"], disabled=actif) if source == "Fichier PDF" else None
+    txt_f = st.text_area("Colle ton texte de cours ici :", height=200, disabled=actif) if source == "Texte libre" else None
+    
+    st.divider()
+    mode_debug = st.checkbox("Activer le mode Debug (Métacognition de l'IA)", value=False, disabled=actif)
+    
+    pret_a_demarrer = (pdf_f is not None) or (txt_f is not None and len(txt_f.strip()) > 10)
+    
+    if st.button("🚀 Démarrer la session", disabled=actif or not pret_a_demarrer):
         try:
             api_key = st.secrets["GOOGLE_API_KEY"]
+            t_extrait = extraire_texte_pdf(pdf_f) if pdf_f else txt_f
             
-            if uploaded_file:
-                with st.spinner("⏳ Extraction du contenu complet de ton document..."):
-                    texte_extrait = extraire_texte_pdf(uploaded_file)
-                    if texte_extrait:
-                        st.session_state.texte_cours_integral = texte_extrait
-                    else:
-                        st.stop()
+            if t_extrait:
+                st.session_state.texte_cours_integral = t_extrait
+                st.session_state.api_key = api_key
+                st.session_state.niveau = niv_e
+                st.session_state.objectif = obj_e
+                st.session_state.strategie = strat_v
+                st.session_state.mode_debug = mode_debug
+                # Sauvegarde du contexte institutionnel
+                st.session_state.matiere_nom = matiere_choisie
+                st.session_state.niveau_nom = niveau_scolaire
+                st.session_state.attendus_cours = REFERENTIELS.get(matiere_choisie, {}).get(niveau_scolaire, None)
+                st.session_state.session_active = True
+                st.rerun()
             else:
-                st.session_state.texte_cours_integral = txt_input
-            
-            st.session_state.api_key = api_key
-            st.session_state.niveau = niveau_eleve
-            st.session_state.objectif = objectif_eleve
-            st.session_state.strategie = strategie_generative_val
-            st.session_state.mode_debug = mode_debug
-            st.session_state.session_active = True
-            st.rerun()
+                st.stop()
         except KeyError:
             st.error("⚠️ La clé API est introuvable dans l'onglet 'Secrets' de Streamlit Cloud.")
         except Exception as e:
             st.error(f"Erreur : {e}")
 
-    if st.session_state.session_active:
+    if actif:
         st.divider()
-        if st.button("🛑 Terminer et voir ma synthèse"):
+        if st.button("🛑 Terminer et voir ma synthèse"): 
             afficher_bilan()
 
 # --- ZONE DE DISCUSSION ORCHESTRÉE ---
-if st.session_state.session_active:
-    modele = initialiser_modele(st.session_state.api_key, st.session_state.niveau, st.session_state.objectif, st.session_state.strategie)
+if st.session_state.get("session_active"):
+    modele = initialiser_modele(
+        st.session_state.api_key, 
+        st.session_state.niveau, 
+        st.session_state.objectif, 
+        st.session_state.strategie,
+        st.session_state.attendus_cours,
+        st.session_state.get("matiere_nom", "Non spécifiée"),
+        st.session_state.get("niveau_nom", "Non spécifié")
+    )
     
     # Affichage de l'historique dans l'UI
     for msg in st.session_state.messages:
         if msg.get("isMeta"):
-            if st.session_state.get("mode_debug", False):
+            if st.session_state.get("mode_debug"):
                 with st.expander("🧠 Méta-cognition de l'IA (Debug)", expanded=False):
                     st.markdown(f"**Diagnostic :** {msg.get('diagnostic', 'N/A')}")
                     st.markdown(f"**Stratégie :** {msg.get('strategie', 'N/A')}")
                     st.markdown(f"**Concept évalué :** {msg.get('concept_actuel_evalue', 'N/A')}")
                     st.markdown(f"**Concepts restants :** {msg.get('liste_concepts_restants_du_cours', 'N/A')}")
         else:
-            with st.chat_message(msg["role"]):
+            with st.chat_message(msg["role"]): 
                 st.markdown(msg["content"])
             
     # Amorçage (1ère question)
@@ -437,72 +531,87 @@ if st.session_state.session_active:
             with st.spinner("L'IA prépare sa stratégie pédagogique..."):
                 contexte = generer_contexte_optimise("Salut ! Je suis prêt, commence l'exercice sur le cours.")
                 reponse = modele.generate_content(contexte)
-                
                 try:
                     reflexion = ReflexionTuteur.model_validate_json(reponse.text)
-                    texte_final = reflexion.reponse_visible
-                    
-                    # Enregistrement de la métacognition
+                    st.session_state.lettre_attendue = reflexion.lettre_attendue_qcm
                     st.session_state.messages.append({
-                        "role": "model",
-                        "content": "",
+                        "role": "model", "content": "", "isMeta": True, 
                         "diagnostic": reflexion.diagnostic_interne,
                         "strategie": reflexion.strategie_choisie,
                         "concept_actuel_evalue": reflexion.concept_actuel_evalue,
-                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours,
-                        "isMeta": True
+                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours
                     })
-                    
-                    if st.session_state.get("mode_debug", False):
-                        with st.expander("🧠 Méta-cognition de l'IA (Debug)", expanded=True):
-                            st.markdown(f"**Diagnostic :** {reflexion.diagnostic_interne}")
-                            st.markdown(f"**Stratégie :** {reflexion.strategie_choisie}")
-                            st.markdown(f"**Concept évalué :** {reflexion.concept_actuel_evalue}")
-                            st.markdown(f"**Concepts restants :** {reflexion.liste_concepts_restants_du_cours}")
-                            
-                    reponse_complete = st.write_stream(simuler_stream(texte_final))
-                    st.session_state.messages.append({"role": "model", "content": reponse_complete})
+                    st.write_stream(simuler_stream(reflexion.reponse_visible))
+                    st.session_state.messages.append({"role": "model", "content": reflexion.reponse_visible})
                 except Exception as e:
                     st.error(f"Erreur d'initialisation JSON : {e}")
 
-    # Boucle d'interaction
-    if prompt := st.chat_input("Écris ta réponse ici..."):
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    # Interaction Élève -> Modèle
+    if query := st.chat_input("Ta réponse..."):
+        st.chat_message("user").markdown(query)
+        st.session_state.messages.append({"role": "user", "content": query})
         
         with st.chat_message("model"):
-            with st.spinner("L'IA réfléchit (Analyse et diagnostic en cours)..."):
-                contexte = generer_contexte_optimise(prompt)
-                reponse = modele.generate_content(contexte)
+            with st.spinner("Analyse cognitive en cours..."):
+                # 1. JUGE DÉTERMINISTE (REGEX QCM)
+                attendu = st.session_state.get("lettre_attendue", "NA")
+                consigne_juge = ""
+                if attendu in ["A", "B", "C", "D"]:
+                    trouve = re.findall(r'\b[A-Da-d]\b', query)
+                    if len(trouve) == 1:
+                        l_eleve = trouve[0].upper()
+                        if l_eleve == attendu:
+                            consigne_juge = f"\n\n<juge_deterministe>INTERVENTION SYMBOLIQUE : L'élève a choisi {l_eleve}. C'est JUSTE. Valide formellement.</juge_deterministe>"
+                        else:
+                            consigne_juge = f"\n\n<juge_deterministe>INTERVENTION SYMBOLIQUE : L'élève a choisi {l_eleve}. C'est FAUX (la bonne était {attendu}). Applique un feedback de processus strict.</juge_deterministe>"
+
+                contexte = generer_contexte_optimise(query + consigne_juge)
                 
+                # 2. APPEL IA (SYMPY TOOL CALLING)
+                res = modele.generate_content(contexte)
+                if res.candidates and res.candidates[0].content.parts:
+                    for part in res.candidates[0].content.parts:
+                        if part.function_call and part.function_call.name == "verifier_calcul_formel":
+                            fc = part.function_call
+                            args = type(fc.args).to_dict(fc.args) if hasattr(fc.args, 'items') else dict(fc.args)
+                            v_res = verifier_calcul_formel(args.get("expression_prof", ""), args.get("expression_eleve", ""))
+                            
+                            part_response = genai.protos.Part(function_response=genai.protos.FunctionResponse(name="verifier_calcul_formel", response=v_res))
+                            contexte.append(res.candidates[0].content)
+                            contexte.append({"role": "user", "parts": [part_response]})
+                            
+                            res = modele.generate_content(contexte)
+                            break
+
+                # 3. FILTRE EXÉCUTIF LOCAL (spaCy) ET AUTO-CORRECTION
                 try:
-                    # Parsing du JSON natif renvoyé par Gemini
-                    reflexion = ReflexionTuteur.model_validate_json(reponse.text)
+                    reflexion = ReflexionTuteur.model_validate_json(res.text)
                     texte_final = reflexion.reponse_visible
                     
-                    # Enregistrement de la métacognition
+                    est_valide, motif_rejet = agent_critique.analyser(texte_final)
+                    
+                    # Boucle de correction interne si surcharge cognitive ou aberration didactique
+                    if not est_valide:
+                        contexte.append(res.candidates[0].content)
+                        alerte = f"\n\n<alerte_inhibition>ATTENTION (INHIBITION SYMBOLIQUE) : {motif_rejet} Corrige le champ 'reponse_visible' en conséquence (Garde le format JSON strict).</alerte_inhibition>"
+                        contexte.append({"role": "user", "parts": [alerte]})
+                        
+                        res_corrige = modele.generate_content(contexte)
+                        reflexion = ReflexionTuteur.model_validate_json(res_corrige.text)
+                        texte_final = reflexion.reponse_visible
+
+                    st.session_state.lettre_attendue = reflexion.lettre_attendue_qcm
                     st.session_state.messages.append({
-                        "role": "model",
-                        "content": "",
+                        "role": "model", "content": "", "isMeta": True, 
                         "diagnostic": reflexion.diagnostic_interne,
                         "strategie": reflexion.strategie_choisie,
                         "concept_actuel_evalue": reflexion.concept_actuel_evalue,
-                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours,
-                        "isMeta": True
+                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours
                     })
                     
-                    if st.session_state.get("mode_debug", False):
-                        with st.expander("🧠 Méta-cognition de l'IA (Debug)", expanded=True):
-                            st.markdown(f"**Diagnostic :** {reflexion.diagnostic_interne}")
-                            st.markdown(f"**Stratégie :** {reflexion.strategie_choisie}")
-                            st.markdown(f"**Concept évalué :** {reflexion.concept_actuel_evalue}")
-                            st.markdown(f"**Concepts restants :** {reflexion.liste_concepts_restants_du_cours}")
-
-                    reponse_complete = st.write_stream(simuler_stream(texte_final))
-                    st.session_state.messages.append({"role": "model", "content": reponse_complete})
-                
+                    st.write_stream(simuler_stream(texte_final))
+                    st.session_state.messages.append({"role": "model", "content": texte_final})
+                    
+                    if st.session_state.get("mode_debug"): st.rerun()
                 except Exception as e:
-                    st.error(f"Erreur lors du traitement JSON : {e}")
-                    # Fallback sécurité
-                    st.markdown("Oups, mon système de réflexion a eu un petit hoquet de formatage. Pourrais-tu reformuler ta réponse s'il te plaît ?")
+                    st.error(f"Erreur lors du formatage IA : {e}. Demande à l'élève de reformuler.")
