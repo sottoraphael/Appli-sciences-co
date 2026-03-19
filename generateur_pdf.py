@@ -145,10 +145,3 @@ def generer_pdf_bytes(texte_bilan, matiere, niveau, objectif):
             pdf.ln(2)
             
     return pdf.output()
-
-**Qu'est-ce qui va changer à l'écran pour l'élève ?**
-* Au lieu d'un gros bloc de texte, le PDF génèrera des sections distinctes avec des titres en gras, colorés et aérés (Les acquis en vert, les erreurs en rouge, les pièges en orange).
-* La syntaxe `$\$f(x)=ax\$.$` se transformera automatiquement en `f(x)=ax`.
-* Les tirets brouillons seront remplacés par des puces `•` avec indentation.
-
-Mettez simplement à jour ce fichier `generateur_pdf.py` sur GitHub et la mise en forme s'appliquera instantanément à vos prochains téléchargements !
