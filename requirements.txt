@@ -1,6 +1,7 @@
 streamlit
 google-generativeai
 PyPDF2
+fpdf2
 sympy
 numpy<2.0.0
 spacy==3.7.4
