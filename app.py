@@ -96,6 +96,27 @@ class ReflexionTuteur(BaseModel):
     reponse_visible: str = Field(description="Le texte final adressé à l'élève, respectant le format LaTeX et la Transparence Cognitive.")
 
 # ==========================================
+# FONCTIONS TECHNIQUES ET SÉCURITÉ
+# ==========================================
+def extraire_json_securise(reponse):
+    """
+    Bouclier algorithmique contre l'erreur Protobuf 'whichOneof' de l'API Google.
+    Extrait le texte en toute sécurité, même si l'IA dévie de sa structure.
+    """
+    try:
+        # Tentative d'accès natif
+        return reponse.text
+    except Exception:
+        # En cas d'erreur (whichOneof), extraction manuelle sécurisée
+        texte_complet = ""
+        if hasattr(reponse, 'candidates') and reponse.candidates:
+            if hasattr(reponse.candidates[0], 'content') and hasattr(reponse.candidates[0].content, 'parts'):
+                for part in reponse.candidates[0].content.parts:
+                    if hasattr(part, 'text') and part.text:
+                        texte_complet += part.text
+        return texte_complet
+
+# ==========================================
 # DÉLÉGATION NEURO-SYMBOLIQUE (SYMPY)
 # ==========================================
 def verifier_calcul_formel(expression_prof: str, expression_eleve: str) -> dict:
@@ -186,9 +207,12 @@ def afficher_bilan():
             
             try:
                 reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif ultra-concis selon tes instructions.")
-                st.success(reponse.text)
                 
-                # --- NOUVEAU BLOC : EXPORT PDF ---
+                # Sécurisation de l'extraction de la réponse
+                texte_bilan_securise = extraire_json_securise(reponse)
+                st.success(texte_bilan_securise)
+                
+                # --- EXPORT PDF ---
                 st.divider()
                 st.markdown("### 📥 Conserver une trace de ta session")
                 st.write("Télécharge ce bilan en PDF pour pouvoir le relire dans quelques jours et planifier ta prochaine révision (Spaced Practice).")
@@ -197,7 +221,7 @@ def afficher_bilan():
                 niveau_pdf = st.session_state.get("niveau_nom", "Non spécifié")
                 objectif_pdf = st.session_state.get("objectif", "Non spécifié")
                 
-                pdf_bytes = generer_pdf_bytes(reponse.text, matiere_pdf, niveau_pdf, objectif_pdf)
+                pdf_bytes = generer_pdf_bytes(texte_bilan_securise, matiere_pdf, niveau_pdf, objectif_pdf)
                 
                 st.download_button(
                     label="📄 Télécharger mon Bilan (PDF)",
@@ -206,7 +230,6 @@ def afficher_bilan():
                     mime="application/pdf",
                     use_container_width=True
                 )
-                # -----------------------------------
 
                 st.divider()
                 st.markdown("### 📊 Évaluation de l'outil")
@@ -369,9 +392,9 @@ L'élève possède les bases mais peut faire des étourderies.
 # POSTURE TUTEUR COGNITIF (INFÉRENCE ET GÉNÉRATION)
 RÈGLE D'INFÉRENCE STRICTE : Bannis les questions littérales. Ne demande jamais de retrouver une information explicitement écrite. Force l'élève à déduire des liens (causaux, chronologiques) ou à cibler le "Pourquoi".
 
-MENU GÉNÉRATIF (Choisis la stratégie la plus pertinente si non précisée et garde la jusqu'à la fin de la discussion) :
+ ou une étape CORRECTE du document (ex: "Quelle hypothèse scientifique justifie ce calcul/ce choix ?"). Ne lui demande pas de justifier son propre raisonnement initial pour éviter d'ancrMENU GÉNÉRATIF (Choisis la stratégie la plus pertinente si non précisée et garde la jusqu'à la fin de la discussion) :
 1. Pré-test (Amorçage) : Pose 3 à 5 questions d'inférence ciblées AVANT la lecture complète.
-2. Auto-explication ciblée : Demande à l'élève de justifier une information ou une étape CORRECTE du document (ex: "Quelle hypothèse scientifique justifie ce calcul/ce choix ?"). Ne lui demande pas de justifier son propre raisonnement initial pour éviter d'ancrer ses erreurs.
+2. Auto-explication ciblée : Demande à l'élève de justifier une informationer ses erreurs.
 3. Résumé avec ses mots : Refuse la paraphrase littérale. Exige une réorganisation personnelle.
 4. Détection d'erreurs : Rédige un court paragraphe, calcul ou raisonnement contenant une erreur typique de la discipline, et force l'élève à inférer la règle violée.
 """
@@ -548,7 +571,9 @@ if st.session_state.get("session_active"):
                 contexte = generer_contexte_optimise("Salut ! Je suis prêt, commence l'exercice sur le cours.")
                 reponse = modele.generate_content(contexte)
                 try:
-                    reflexion = ReflexionTuteur.model_validate_json(reponse.text)
+                    # Utilisation sécurisée pour contourner l'erreur whichOneof
+                    texte_json = extraire_json_securise(reponse)
+                    reflexion = ReflexionTuteur.model_validate_json(texte_json)
                     st.session_state.lettre_attendue = reflexion.lettre_attendue_qcm
                     st.session_state.messages.append({
                         "role": "model", "content": "", "isMeta": True, 
@@ -589,14 +614,14 @@ if st.session_state.get("session_active"):
                     for part in res.candidates[0].content.parts:
                         if part.function_call and part.function_call.name == "verifier_calcul_formel":
                             fc = part.function_call
-                            # Extraction sécurisée des arguments
+                            # CORRECTION STRICTE : Extraction sécurisée des arguments (Compatible MapComposite)
                             args = {}
                             try:
-                                # Itération directe sécurisée pour les objets MapComposite (Protobuf)
                                 for key in fc.args:
                                     args[key] = fc.args[key]
                             except Exception:
                                 pass
+                            
                             v_res = verifier_calcul_formel(args.get("expression_prof", ""), args.get("expression_eleve", ""))
                             
                             part_response = genai.protos.Part(function_response=genai.protos.FunctionResponse(name="verifier_calcul_formel", response=v_res))
@@ -608,7 +633,9 @@ if st.session_state.get("session_active"):
 
                 # 3. FILTRE EXÉCUTIF LOCAL (spaCy) ET AUTO-CORRECTION
                 try:
-                    reflexion = ReflexionTuteur.model_validate_json(res.text)
+                    # Utilisation sécurisée pour contourner l'erreur whichOneof
+                    texte_json = extraire_json_securise(res)
+                    reflexion = ReflexionTuteur.model_validate_json(texte_json)
                     texte_final = reflexion.reponse_visible
                     
                     est_valide, motif_rejet = agent_critique.analyser(texte_final)
@@ -620,7 +647,9 @@ if st.session_state.get("session_active"):
                         contexte.append({"role": "user", "parts": [alerte]})
                         
                         res_corrige = modele.generate_content(contexte)
-                        reflexion = ReflexionTuteur.model_validate_json(res_corrige.text)
+                        # Utilisation sécurisée après l'alerte
+                        texte_json_corrige = extraire_json_securise(res_corrige)
+                        reflexion = ReflexionTuteur.model_validate_json(texte_json_corrige)
                         texte_final = reflexion.reponse_visible
 
                     st.session_state.lettre_attendue = reflexion.lettre_attendue_qcm
