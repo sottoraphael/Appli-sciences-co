@@ -2,6 +2,7 @@ streamlit
 google-generativeai
 PyPDF2
 sympy
-spacy
+numpy<2.0.0
+spacy==3.7.4
 pydantic
 https://github.com/explosion/spacy-models/releases/download/fr_core_news_sm-3.7.0/fr_core_news_sm-3.7.0.tar.gz
