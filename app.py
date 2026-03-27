@@ -101,27 +101,60 @@ class ReflexionTuteur(BaseModel):
 # ==========================================
 def extraire_json_securise(reponse):
     """
-    Bouclier algorithmique contre l'erreur Protobuf 'whichOneof' de l'API Google.
-    Extrait et nettoie le texte pour garantir un parsing JSON strict par Pydantic.
+    Fonction instrumentée pour le débogage. 
+    Affiche l'état interne de l'objet reponse dans le terminal.
     """
+    import re
+    import json
+    
+    # --- DÉBUT DE LA SONDE DE DÉBOGAGE ---
+    print("\n" + "="*50)
+    print("🔍 DEBUG - ANALYSE DE LA RÉPONSE BRUTE DE L'API")
+    print("="*50)
+    
+    # Vérification des blocages de sécurité au niveau de l'invite (Prompt Feedback)
+    if hasattr(reponse, 'prompt_feedback'):
+        print(f"Blocage du Prompt : {reponse.prompt_feedback}")
+        
+    # Vérification de l'état des candidats générés
+    if hasattr(reponse, 'candidates') and reponse.candidates:
+        candidat = reponse.candidates[0]
+        print(f"Raison d'arrêt (finish_reason) : {candidat.finish_reason}")
+        if hasattr(candidat, 'safety_ratings'):
+             print(f"Évaluations de sécurité : {candidat.safety_ratings}")
+    else:
+        print("ATTENTION : Aucun candidat généré par l'API.")
+    # --- FIN DE LA SONDE DE DÉBOGAGE ---
+
     texte_complet = ""
     try:
-        # Tentative d'accès natif
         texte_complet = reponse.text
-    except Exception:
-        # En cas d'erreur (whichOneof), extraction manuelle sécurisée
+    except Exception as e:
+        print(f"⚠️ Exception lors de l'accès à reponse.text : {e}")
         if hasattr(reponse, 'candidates') and reponse.candidates:
             if hasattr(reponse.candidates[0], 'content') and hasattr(reponse.candidates[0].content, 'parts'):
                 for part in reponse.candidates[0].content.parts:
                     if hasattr(part, 'text') and part.text:
                         texte_complet += part.text
 
-    import re
-    import json
-    
-    # Construction de la regex sécurisée (évite la cassure du string lors du copier-coller)
     balise = "`" * 3
     pattern = r"^" + balise + r"(?:json)?|" + balise + r"$"
+    texte_propre = re.sub(pattern, "", texte_complet.strip(), flags=re.MULTILINE).strip()
+
+    print(f"📝 TEXTE BRUT RÉCUPÉRÉ (Longueur: {len(texte_propre)} caractères) :\n'{texte_propre}'")
+    print("="*50 + "\n")
+
+    if not texte_propre:
+        return json.dumps({
+            "diagnostic_interne": "Échec d'extraction de l'inférence ou chaîne vide retournée par l'API.",
+            "lettre_attendue_qcm": "NA",
+            "concept_actuel_evalue": "Initialisation de secours",
+            "liste_concepts_restants_du_cours": "Inconnu",
+            "strategie_choisie": "Remédiation",
+            "reponse_visible": "J'ai rencontré une brève difficulté technique pour analyser ce passage. Pourrions-nous commencer par le premier concept de ton cours ?"
+        })
+
+    return texte_proprer"$"
     
     # Nettoyage des balises et des espaces résiduels
     texte_propre = re.sub(pattern, "", texte_complet.strip(), flags=re.MULTILINE).strip()
