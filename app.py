@@ -23,12 +23,33 @@ st.set_page_config(page_title="Réviser avec les sciences cognitives", page_icon
 
 st.markdown("""
     <style>
-    .stApp { transition: all 0.1s ease-in-out; }
+    /* Importation de la police accessible Lexend */
+    @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600&display=swap');
+
+    /* Neutralisation des animations parasites */
+    .stApp { transition: none !important; }
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    .stButton>button { width: 100%; border-radius: 15px; font-weight: bold; }
-    .stChatMessage { border-radius: 15px; border: 1px solid #E2E8F0; }
-    /* NOUVEAU : CSS pour l'aide syntaxique */
+
+    /* Application globale des règles d'accessibilité cognitive */
+    html, body, [class*="css"] {
+        font-family: 'Lexend', sans-serif !important;
+        line-height: 1.5 !important;
+        color: #2D3748 !important; /* Gris anthracite */
+        background-color: #FCFCFC !important; /* Blanc très légèrement cassé */
+    }
+
+    /* Espacement explicite des paragraphes (Chunking visuel) */
+    p {
+        margin-bottom: 1.2rem !important;
+    }
+
+    /* Ergonomie des composants interactifs */
+    .stButton>button { width: 100%; border-radius: 8px; font-weight: 500; }
+    .stChatMessage { border-radius: 8px; border: 1px solid #E2E8F0; }
+    
+    /* Isolation typographique stricte pour le rendu formel */
+    .katex-display { background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin: 1rem 0; overflow-x: auto; }
     .syntax-help { font-size: 0.85rem; color: #4A5568; background-color: #EDF2F7; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
