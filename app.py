@@ -101,21 +101,24 @@ class ReflexionTuteur(BaseModel):
 def extraire_json_securise(reponse):
     """
     Bouclier algorithmique contre l'erreur Protobuf 'whichOneof' de l'API Google.
-    Extrait le texte en toute sécurité, même si l'IA dévie de sa structure.
+    Extrait et nettoie le texte pour garantir un parsing JSON strict par Pydantic.
     """
+    texte_complet = ""
     try:
         # Tentative d'accès natif
-        return reponse.text
+        texte_complet = reponse.text
     except Exception:
         # En cas d'erreur (whichOneof), extraction manuelle sécurisée
-        texte_complet = ""
         if hasattr(reponse, 'candidates') and reponse.candidates:
             if hasattr(reponse.candidates[0], 'content') and hasattr(reponse.candidates[0].content, 'parts'):
                 for part in reponse.candidates[0].content.parts:
                     if hasattr(part, 'text') and part.text:
                         texte_complet += part.text
-        return texte_complet
 
+    # Nettoyage des balises Markdown et des espaces résiduels
+    import re
+    import json
+    texte_propre = re.sub(r"^
 # ==========================================
 # DÉLÉGATION NEURO-SYMBOLIQUE (SYMPY)
 # ==========================================
