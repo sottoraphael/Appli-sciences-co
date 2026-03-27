@@ -28,6 +28,8 @@ st.markdown("""
     footer {visibility: hidden;}
     .stButton>button { width: 100%; border-radius: 15px; font-weight: bold; }
     .stChatMessage { border-radius: 15px; border: 1px solid #E2E8F0; }
+    /* NOUVEAU : CSS pour l'aide syntaxique */
+    .syntax-help { font-size: 0.85rem; color: #4A5568; background-color: #EDF2F7; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -303,6 +305,7 @@ Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter 
 - **Feedback factuel et spécifique :** Justifie systématiquement ton évaluation. Appuie toujours une validation ("C'est juste/faux") par une explication tirée du cours, et remplace les "Bravo !" vagues par la valorisation d'un effort ou d'une étape précise.
 - **Évaluation intra-individuelle :** Juge et valorise les progrès de l'élève uniquement par rapport à ses propres réponses précédentes.
 - **Ancrage documentaire strict (ANTI-HALLUCINATION) :** Utilise STRICTEMENT et EXCLUSIVEMENT les règles, concepts et vocabulaire présents dans le cours fourni. Si une donnée manque pour expliquer ou générer un exercice, déclare explicitement : "Non rapporté dans le document".
+- **MÉTACOGNITION ET CONFLIT COGNITIF (NOUVEAU) :** L'élève te transmettra son degré de certitude avec sa réponse (sous la forme [Certitude: X]). Si sa réponse est fausse mais qu'il se déclare "Très sûr" ou "Certain", tu DOIS pointer cet écart factuellement pour créer un conflit cognitif constructif (ex: "Tu semblais sûr de toi, pourtant l'application de la règle donne un autre résultat..."). Ne mentionne jamais explicitement la balise [Certitude] dans ton texte final.
 </socle_commun>\n\n"""
 
     # 2. BIFURCATION ARCHITECTURALE ABSOLUE
@@ -585,7 +588,7 @@ if st.session_state.get("session_active"):
         st.session_state.get("niveau_nom", "Non spécifié")
     )
     
-    # Affichage de l'historique dans l'UI
+    # Affichage de l'historique dans l'UI avec masquage de la balise métacognitive
     for msg in st.session_state.messages:
         if msg.get("isMeta"):
             if st.session_state.get("mode_debug", False):
@@ -596,7 +599,11 @@ if st.session_state.get("session_active"):
                     st.markdown(f"**Concepts restants :** {msg.get('liste_concepts_restants_du_cours', 'N/A')}")
         else:
             with st.chat_message(msg["role"]): 
-                st.markdown(msg["content"])
+                texte_affiche = msg["content"]
+                # On rend invisible la métadonnée de certitude pour l'élève
+                if msg["role"] == "user":
+                    texte_affiche = re.sub(r'\[Certitude:.*?\]\n', '', texte_affiche)
+                st.markdown(texte_affiche)
             
     # Amorçage (1ère question)
     if len(st.session_state.messages) == 0:
@@ -621,10 +628,25 @@ if st.session_state.get("session_active"):
                 except Exception as e:
                     st.error(f"Erreur d'initialisation JSON : {e}")
 
-    # Interaction Élève -> Modèle
-    if query := st.chat_input("Ta réponse..."):
-        st.chat_message("user").markdown(query)
-        st.session_state.messages.append({"role": "user", "content": query})
+    # NOUVEAU : Interaction Élève -> Modèle (Saisie composite Math + Métacognition)
+    st.markdown("---")
+    st.markdown("<div class='syntax-help'>💡 <b>Saisie mathématique :</b> Fraction <code>a/b</code> | Puissance <code>x^2</code> | Racine <code>sqrt(x)</code> | $\pi$ <code>pi</code></div>", unsafe_allow_html=True)
+    
+    with st.form("saisie_eleve_form", clear_on_submit=True):
+        reponse_texte = st.text_input("Ta réponse :", placeholder="Écris ta réponse ou ton calcul ici...")
+        certitude = st.select_slider(
+            "🧠 Évalue ton degré de certitude avant d'envoyer :",
+            options=["Au hasard", "Peu sûr", "Moyennement sûr", "Très sûr", "Certain"],
+            value="Moyennement sûr"
+        )
+        soumis = st.form_submit_button("Envoyer ma réponse")
+
+    if soumis and reponse_texte.strip():
+        # Fusion silencieuse de la métacognition et de la réponse
+        query_combine = f"[Certitude: {certitude}]\n{reponse_texte}"
+        
+        st.chat_message("user").markdown(reponse_texte) # On affiche uniquement la réponse textuelle
+        st.session_state.messages.append({"role": "user", "content": query_combine}) # On stocke le contenu enrichi
         
         with st.chat_message("model"):
             with st.spinner("Analyse cognitive en cours..."):
@@ -632,7 +654,8 @@ if st.session_state.get("session_active"):
                 attendu = st.session_state.get("lettre_attendue", "NA")
                 consigne_juge = ""
                 if attendu in ["A", "B", "C", "D"]:
-                    trouve = re.findall(r'\b[A-Da-d]\b', query)
+                    # On cible uniquement la chaîne saisie par l'élève pour éviter les faux positifs liés au slider
+                    trouve = re.findall(r'\b[A-Da-d]\b', reponse_texte)
                     if len(trouve) == 1:
                         l_eleve = trouve[0].upper()
                         if l_eleve == attendu:
@@ -640,7 +663,7 @@ if st.session_state.get("session_active"):
                         else:
                             consigne_juge = f"\n\n<juge_deterministe>INTERVENTION SYMBOLIQUE : L'élève a choisi {l_eleve}. C'est FAUX (la bonne était {attendu}). Applique un feedback de processus strict.</juge_deterministe>"
 
-                contexte = generer_contexte_optimise(query + consigne_juge)
+                contexte = generer_contexte_optimise(query_combine + consigne_juge)
                 
                 # 2. APPEL IA (SYMPY TOOL CALLING)
                 res = modele.generate_content(contexte)
