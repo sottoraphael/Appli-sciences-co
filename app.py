@@ -115,10 +115,28 @@ def extraire_json_securise(reponse):
                     if hasattr(part, 'text') and part.text:
                         texte_complet += part.text
 
-    # Nettoyage des balises Markdown et des espaces résiduels
     import re
     import json
-    texte_propre = re.sub(r"^
+    
+    # Construction de la regex sécurisée (évite la cassure du string lors du copier-coller)
+    balise = "`" * 3
+    pattern = r"^" + balise + r"(?:json)?|" + balise + r"$"
+    
+    # Nettoyage des balises et des espaces résiduels
+    texte_propre = re.sub(pattern, "", texte_complet.strip(), flags=re.MULTILINE).strip()
+
+    # Prévention de l'erreur EOF Pydantic via un JSON de remédiation par défaut
+    if not texte_propre:
+        return json.dumps({
+            "diagnostic_interne": "Échec d'extraction de l'inférence ou chaîne vide retournée par l'API.",
+            "lettre_attendue_qcm": "NA",
+            "concept_actuel_evalue": "Initialisation de secours",
+            "liste_concepts_restants_du_cours": "Inconnu",
+            "strategie_choisie": "Remédiation",
+            "reponse_visible": "J'ai rencontré une brève difficulté technique pour analyser ce passage. Pourrions-nous commencer par le premier concept de ton cours ?"
+        })
+
+    return texte_propre
 # ==========================================
 # DÉLÉGATION NEURO-SYMBOLIQUE (SYMPY)
 # ==========================================
