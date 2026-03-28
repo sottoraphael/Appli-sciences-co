@@ -498,6 +498,9 @@ def initialiser_modele(api_key, niveau, objectif, strategie, attendus=None, mati
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
         },
         generation_config=genai.GenerationConfig(
+            temperature=0.2,          
+            top_p=0.8,                 
+            top_k=40,                
             response_mime_type="application/json",
             response_schema=ReflexionTuteur
         )
