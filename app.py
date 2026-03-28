@@ -188,25 +188,40 @@ def charger_modele_nlp():
         return spacy.load("fr_core_news_sm")
 
 class AgentCritique:
-    """Filtre exécutif pour limiter la charge cognitive extrinsèque."""
+    """Filtre exécutif pour limiter la charge cognitive extrinsèque et garantir la rigueur didactique."""
     def __init__(self):
         self.nlp = charger_modele_nlp()
 
     def analyser(self, texte_reponse):
+        # 1. Prévention de la surcharge en mémoire de travail (Charge extrinsèque)
         doc = self.nlp(texte_reponse)
         phrases_longues = [sent.text for sent in doc.sents if len([t for t in sent if not t.is_punct]) > 30]
         if phrases_longues:
-            return False, f"Surcharge cognitive détectée. Ta phrase est trop longue ({len([t for t in self.nlp(phrases_longues[0]) if not t.is_punct])} mots). Scinde tes idées en phrases plus courtes pour respecter la mémoire de travail de l'élève."
+            return False, f"Surcharge cognitive détectée. Ta phrase dépasse 30 mots (empan mnésique saturé). Scinde tes idées en phrases plus courtes."
 
-        risque_negatif = any(token.text.startswith('-') and token.pos_ == "NUM" for token in doc)
-        if risque_negatif:
-             for token in doc:
-                 if token.text.startswith('-') and token.pos_ == "NUM":
-                     if token.i + 1 < len(doc) and doc[token.i + 1].pos_ == "NOUN":
-                         return False, "Aberration didactique détectée. On ne peut pas posséder une quantité négative d'objets physiques (ex: pommes). Adapte ton analogie pour les relatifs (utilise la température, les dettes, ou l'ascenseur)."
+        # 2. Prévention des obstacles épistémologiques (Didactique des nombres relatifs)
+        for token in doc:
+            if token.text.startswith('-') and token.pos_ == "NUM":
+                # Vérification sur une fenêtre de 3 mots pour anticiper les adjectifs (ex: "-3 petites pommes")
+                fenetre = doc[token.i + 1 : min(token.i + 4, len(doc))]
+                if any(t.pos_ == "NOUN" for t in fenetre):
+                     return False, "Aberration didactique détectée. On ne peut pas posséder une quantité négative d'objets physiques concrêts. Adapte ton analogie pour les nombres relatifs (utilise la température, le solde bancaire ou l'ascenseur)."
+
+        # 3. Filtrage du hors-programme absolu (Respect strict de la Zone Proximale de Développement)
+        termes_interdits = {"infini", "dérivée", "intégrale", "asymptote", "logarithme", "limite"}
+        lemmas = {token.lemma_.lower() for token in doc}
+        intersections = termes_interdits.intersection(lemmas)
+        if intersections:
+            return False, f"Hors-programme détecté ({', '.join(intersections)}). L'introduction de ces concepts génère une charge cognitive extrinsèque inutile au collège. Reformule en utilisant strictement les attendus officiels des cycles 3 ou 4."
+
+        # 4. Protection axiomatique (Division par zéro)
+        import re
+        if re.search(r'(/|\\div|\\frac\{[^\}]+\})\s*\{?0\}?|\bdivis(é|er)\s+par\s+z[é|e]ro\b', texte_reponse, re.IGNORECASE):
+            return False, "Aberration mathématique majeure. Tu as généré une division par zéro dans ton exemple ou ton calcul. Corrige immédiatement cette structure."
 
         return True, ""
 
+# Instanciation de l'agent
 agent_critique = AgentCritique()
 
 # ==========================================
@@ -326,17 +341,16 @@ Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter 
     # 2. BIFURCATION ARCHITECTURALE ABSOLUE
     if strategie_generative == "Effet_Protege":
         prompt_systeme += """<role_sacha>
-# 🎭 RÔLE TEMPORAIRE : LE CAMARADE EN DIFFICULTÉ (EFFET PROTÉGÉ / PEER TUTORING)
-ATTENTION : Oublie ton rôle de tuteur expert. Incarne exclusivement le rôle d'un élève humain et novice. Masque totalement ton expertise et ton identité logicielle.
-Ton but caché est d'obliger l'utilisateur à structurer sa pensée et vulgariser le concept.
+# 🎭 RÔLE TEMPORAIRE : LE CAMARADE EN DIFFICULTÉ (EFFET PROTÉGÉ)
+ATTENTION : Incarne exclusivement le rôle d'un élève humain de la classe spécifiée dans le <cadre_institutionnel>. Ton but est de forcer l'utilisateur à vulgariser le concept (Apprentissage Génératif).
 
 🛑 RÈGLES STRICTES DU JEU DE RÔLE :
-1. ANTI-RÉCITATION : Attends systématiquement que l'utilisateur introduise un terme technique pour l'employer à ton tour. Rejette le jargon ("C'est trop compliqué, on dirait le prof. Tu peux m'expliquer simplement ?").
-2. SCAFFOLDING NAÏF : Dès ta première intervention, explicite ta surcharge cognitive (« J'ai lu le cours mais tout s'embrouille, par quoi je dois commencer ? », «Salut ! J'ai essayé de lire le document sur [Sujet], mais je t'avoue que je suis complètement perdu... Tu pourrais m'expliquer [Concept] pour commencer ?» ). Ensuite, pose UNE SEULE question naïve à la fois. Si l'explication est trop longue, coupe-le ("Attends, tu vas trop vite. C'est quoi l'étape 1 ?").
-3. L'ERREUR INTENTIONNELLE : Injecte la confusion la plus classique que font les novices. Force l'utilisateur à démonter cette erreur logique.
-4. GESTION DE L'ÉCHEC : Si l'utilisateur valide ton erreur, aggrave ton raisonnement absurde à la réplique suivante.
-5. LIMITE DE BLOCAGE (2 itérations) : Si l'utilisateur échoue 2 fois de suite à t'expliquer ou tourne en rond, casse la boucle en simulant une trouvaille dans le cours : "Attends, j'ai regardé dans le manuel, ils disent que c'est [Solution du cours]. Mais du coup, comment on applique ça pour [Question similaire] ?"
-6. DÉCLIC ET ÉVALUATION INVERSÉE : Si l'utilisateur corrige ton erreur clairement, reformule avec ses mots. Valorise sa pédagogie en explicitant le déclic ("Ton exemple m'a débloqué parce qu'avant je confondais avec [X]"). Demande-lui une question piège pour te tester.
+1. ANTI-RÉCITATION : Attends que l'utilisateur introduise le <vocabulaire_exigible> pour l'employer. Rejette les phrases recopiées du cours ("C'est la définition du prof ça, tu peux m'expliquer avec tes mots ?").
+2. LIMITATION DE LA MÉMOIRE DE TRAVAIL : Explicite ta surcharge cognitive. Pose UNE SEULE question naïve à la fois. Si l'explication de l'utilisateur dépasse 3 phrases, coupe-le ("Attends, je suis perdu avec toutes ces infos. C'est quoi la première étape exacte ?").
+3. L'ERREUR INTENTIONNELLE (SOUS CONTRAINTE STRICTE) : Injecte une confusion classique de novice, mais cette erreur DOIT STRICTEMENT rester dans le périmètre des <notions_cles_autorisees>. Il est ABSOLUMENT INTERDIT d'inventer une erreur qui ferait appel aux <limites_strictes> (hors-programme).
+4. AGGRAVATION LOGIQUE : Si l'utilisateur valide ton erreur au lieu de la corriger, aggrave ton raisonnement absurde à la réplique suivante en te basant sur sa validation.
+5. SOUPAPE DE SÉCURITÉ (2 itérations) : Si l'utilisateur échoue 2 fois de suite à t'expliquer, casse le jeu de rôle en simulant une lecture du cours : "Attends, j'ai relu le manuel, ils disent que c'est [Solution exacte du cours]. Comment on l'applique ici ?"
+6. DÉCLIC ET TRANSFERT : Si l'utilisateur corrige ton erreur, explicite ton déclic ("Ah, j'ai compris, je confondais avec..."). Demande-lui ensuite d'inventer un petit calcul ou exemple pour vérifier que tu as bien compris.
 
 # LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
 - Séquençage : L'utilisateur effectue cet exercice PENDANT l'étude, avec le document sous les yeux (à livre ouvert).
