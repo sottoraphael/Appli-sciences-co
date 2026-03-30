@@ -552,20 +552,18 @@ st.title("🦉 Réviser avec les sciences cognitives")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
 with st.sidebar:
-    st.header("⚙️ Paramètres du cours")
+    # Remontée forcée du titre pour optimiser l'espace vertical
+    st.markdown("<h3 style='margin-top: -40px;'>⚙️ Paramètres du cours</h3>", unsafe_allow_html=True)
     actif = st.session_state.get("session_active", False)
     
-    # 1. Alignement horizontal conservé pour Matière et Classe
-    col1, col2 = st.columns(2)
+    # 1. Retour à l'empilement vertical pour garantir une lisibilité complète
     matieres_dispos = list(REFERENTIELS.keys()) if REFERENTIELS else ["Mathématiques", "Générique"]
-    with col1:
-        matiere_choisie = st.selectbox("Matière", matieres_dispos, disabled=actif)
+    matiere_choisie = st.selectbox("Matière", matieres_dispos, disabled=actif)
     
     niveaux_scolaires = list(REFERENTIELS.get(matiere_choisie, {}).keys()) if REFERENTIELS else ["6ème", "5ème", "4ème", "3ème"]
-    with col2:
-        niveau_scolaire = st.selectbox("Classe", niveaux_scolaires, disabled=actif)
+    niveau_scolaire = st.selectbox("Classe", niveaux_scolaires, disabled=actif)
     
-    # 2. Retour au st.radio avec un texte légèrement plus incisif
+    # 2. Scénarios (Radio)
     st.markdown("### 🎯 Ton objectif")
     options_scenarios = [
         "🌱 Je découvre : mémoriser pas à pas",
@@ -574,10 +572,9 @@ with st.sidebar:
         "⚙️ Je m'entraîne : questions difficiles",
         "🎭 Je maîtrise : expliquer le cours"
     ]
-    # Le label_visibility="collapsed" évite d'afficher un double titre
     choix_scenario = st.radio("Situation", options_scenarios, disabled=actif, label_visibility="collapsed")
     
-    # Mapping cognitif préservé
+    # Mapping cognitif
     if "découvre" in choix_scenario:
         niv_e, obj_e, strat_v = "Novice", "Mode A : Mémorisation", "Classique"
     elif "révise" in choix_scenario:
@@ -589,7 +586,7 @@ with st.sidebar:
     elif "maîtrise" in choix_scenario:
         niv_e, obj_e, strat_v = "Avancé", "Mode B : Compréhension", "Effet_Protege"
     
-    # 3. Source du cours (alignement horizontal conservé)
+    # 3. Source du cours
     st.markdown("### 🧭 Support de cours")
     source = st.radio("Source", ["Fichier PDF", "Texte libre"], disabled=actif, horizontal=True, label_visibility="collapsed")
     
