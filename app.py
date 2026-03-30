@@ -56,34 +56,44 @@ except AttributeError:
 # ==========================================
 # --- TUTORIEL D'ACCUEIL ---
 # ==========================================
-@st.dialog("👋 Bienvenue dans cette application de révision")
+@st.dialog("👋 Bienvenue dans ton espace de révision", width="large")
 def afficher_tutoriel():
     st.markdown("""
         <style>
-        .big-font { font-size: 1.25rem !important; line-height: 1.7 !important; color: #2D3748; }
-        .step-title { font-weight: bold; color: #5B9BD5; font-size: 1.35rem; display: block; margin-top: 15px; }
-        .mode-box { background-color: #F0F4F8; padding: 15px; border-radius: 12px; margin: 15px 0; border-left: 6px solid #5B9BD5; }
+        .big-font { font-size: 1.15rem !important; line-height: 1.6 !important; color: #2D3748; }
+        .step-title { font-weight: 600; color: #3182CE; font-size: 1.25rem; display: block; margin-top: 15px; }
+        .mode-box { background-color: #EBF8FF; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 5px solid #3182CE; }
+        ul { margin-top: 5px; margin-bottom: 10px; }
         </style>
         <div class="big-font">
-        Cette application utilise les principes issus des <b>sciences cognitives</b> pour t'aider à réviser efficacement.<br>
+        Cette application s'appuie sur la recherche en <b>sciences cognitives</b> pour optimiser ton temps de travail. Elle remplace la simple relecture (peu efficace) par un entraînement actif.
+        
         <div class="mode-box">
-        <b>💡 Quel mode choisir ?</b><br><br>
-        • <b>Mémorisation :</b> Pour retenir les définitions et les concepts "par cœur".<br><br>
-        • <b>Compréhension :</b> Pour maîtriser ton cours en profondeur en l'expliquant avec tes propres mots.
+        <b>🎯 L'importance de ton objectif</b><br>
+        Pour que le tuteur t'aide efficacement, tu dois d'abord évaluer ton niveau actuel dans le menu de gauche :
+        <ul>
+            <li><b>Pour ancrer les bases :</b> Choisis <i>Découvrir</i> ou <i>Réviser</i> (Le tuteur te posera des questions directes pour tester ta mémoire).</li>
+            <li><b>Pour approfondir :</b> Choisis <i>Comprendre</i> ou <i>S'entraîner</i> (Le tuteur te posera des questions de réflexion).</li>
+            <li><b>Pour le test ultime :</b> Choisis <i>Maîtriser</i>. Le tuteur jouera le rôle d'un camarade en difficulté, et c'est toi qui devras lui expliquer le cours !</li>
+        </ul>
         </div>
-        <b>Comment l'utiliser en 3 étapes :</b><br>
-        <span class="step-title">1. ⚙️ Règle l'application</span> Choisis ton mode et ton niveau.<br>
-        <span class="step-title">2. 🧭 Donne-lui ton cours</span> Charge ton PDF ou colle ton texte.<br>
-        <span class="step-title">3. 💬 Discute</span> Réponds aux questions dans le chat, et demande ton bilan à la fin !
+        
+        <b>Comment démarrer ta session en 3 étapes :</b>
+        <span class="step-title">1. ⚙️ Paramètre ta séance</span> 
+        Sélectionne ta classe, ta matière et ta situation actuelle.
+        <span class="step-title">2. 🧭 Transmets ton support</span> 
+        Charge ton fichier PDF ou colle le texte de ta leçon. Le tuteur se basera <i>strictement</i> sur ce document.
+        <span class="step-title">3. 💬 Entraîne-toi et analyse tes erreurs</span> 
+        Réponds aux questions dans le chat. À la fin, clique sur "Terminer" pour obtenir ton <b>bilan de révision</b> (ce que tu maîtrises et ce qu'il faut revoir).
         </div><br>
     """, unsafe_allow_html=True)
-    if st.button("🚀 J'ai compris, c'est parti !", use_container_width=True):
+    
+    if st.button("🚀 J'ai compris le principe, c'est parti !", use_container_width=True):
         st.session_state.tutoriel_vu = True
         st.rerun()
 
 if not st.session_state.tutoriel_vu:
     afficher_tutoriel()
-
 # ==========================================
 # SCHÉMAS PYDANTIC (MÉTACOGNITION IA)
 # ==========================================
