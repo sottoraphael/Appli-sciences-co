@@ -553,27 +553,28 @@ st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.
 
 with st.sidebar:
     st.header("⚙️ Paramètres du cours")
-    actif = st.session_active = st.session_state.get("session_active", False)
+    actif = st.session_state.get("session_active", False)
     
-    # Sélection du Cadre Institutionnel (ZPD) basé sur le dictionnaire importé
+    # 1. Alignement horizontal pour la Matière et la Classe
+    col1, col2 = st.columns(2)
     matieres_dispos = list(REFERENTIELS.keys()) if REFERENTIELS else ["Mathématiques", "Générique"]
-    matiere_choisie = st.selectbox("Matière :", matieres_dispos, disabled=actif)
+    with col1:
+        matiere_choisie = st.selectbox("Matière", matieres_dispos, disabled=actif)
     
     niveaux_scolaires = list(REFERENTIELS.get(matiere_choisie, {}).keys()) if REFERENTIELS else ["6ème", "5ème", "4ème", "3ème"]
-    niveau_scolaire = st.selectbox("Classe :", niveaux_scolaires, disabled=actif)
+    with col2:
+        niveau_scolaire = st.selectbox("Classe", niveaux_scolaires, disabled=actif)
     
-    st.divider()
-    
-    st.markdown("### 🎯 Ton objectif d'aujourd'hui")
+    # 2. Remplacement des boutons radio par un menu déroulant compact
+    st.markdown("### 🎯 Ton objectif")
     options_scenarios = [
-        "🌱 Je découvre : aide-moi à mémoriser les bases pas à pas.",
-        "🧠 Je révise : teste ma mémoire directement.",
-        "🔍 Je comprends : aide-moi à faire les liens entre les idées.",
-        "⚙️ Je m'entraîne : pose-moi des questions de réflexion difficiles.",
-        "🎭 Je maîtrise : je t'explique le cours comme à un camarade."
+        "🌱 Je découvre : mémoriser les bases",
+        "🧠 Je révise : tester ma mémoire",
+        "🔍 Je comprends : faire des liens logiques",
+        "⚙️ Je m'entraîne : questions de réflexion",
+        "🎭 Je maîtrise : expliquer à un camarade"
     ]
-    
-    choix_scenario = st.radio("Choisis ta situation :", options_scenarios, disabled=actif)
+    choix_scenario = st.selectbox("Situation", options_scenarios, disabled=actif, label_visibility="collapsed")
     
     # Mapping cognitif : Traduction du scénario vers les variables système
     if "découvre" in choix_scenario:
@@ -582,22 +583,29 @@ with st.sidebar:
         niv_e, obj_e, strat_v = "Avancé", "Mode A : Mémorisation", "Classique"
     elif "comprends" in choix_scenario:
         niv_e, obj_e, strat_v = "Novice", "Mode B : Compréhension", "Classique"
-    elif "m'entraîne" in choix_scenario:
+    elif "entraîne" in choix_scenario:
         niv_e, obj_e, strat_v = "Avancé", "Mode B : Compréhension", "Classique"
     elif "maîtrise" in choix_scenario:
         niv_e, obj_e, strat_v = "Avancé", "Mode B : Compréhension", "Effet_Protege"
     
-    st.divider()
-    source = st.radio("Source du cours :", ["Fichier PDF", "Texte libre"], disabled=actif)
-    pdf_f = st.file_uploader("Charge ton cours (PDF)", type=["pdf"], disabled=actif) if source == "Fichier PDF" else None
-    txt_f = st.text_area("Colle ton texte de cours ici :", height=200, disabled=actif) if source == "Texte libre" else None
+    # 3. Source du cours avec alignement horizontal
+    st.markdown("### 🧭 Support de cours")
+    source = st.radio("Source", ["Fichier PDF", "Texte libre"], disabled=actif, horizontal=True, label_visibility="collapsed")
     
-    st.divider()
-    mode_debug = st.checkbox("Activer le mode Debug (Métacognition de l'IA)", value=False, disabled=actif)
+    if source == "Fichier PDF":
+        pdf_f = st.file_uploader("Charge ton cours (PDF)", type=["pdf"], disabled=actif)
+        txt_f = None
+    else:
+        pdf_f = None
+        # Hauteur réduite pour éviter de forcer le défilement
+        txt_f = st.text_area("Colle ton texte ici :", height=120, disabled=actif)
+    
+    mode_debug = st.checkbox("Activer le mode Debug (IA)", value=False, disabled=actif)
     
     pret_a_demarrer = (pdf_f is not None) or (txt_f is not None and len(txt_f.strip()) > 10)
     
-    if st.button("🚀 Démarrer la session", disabled=actif or not pret_a_demarrer):
+    st.write("") # Léger espacement avant le bouton final
+    if st.button("🚀 Démarrer la session", disabled=actif or not pret_a_demarrer, type="primary", use_container_width=True):
         try:
             api_key = st.secrets["GOOGLE_API_KEY"]
             t_extrait = extraire_texte_pdf(pdf_f) if pdf_f else txt_f
@@ -609,10 +617,8 @@ with st.sidebar:
                 st.session_state.objectif = obj_e
                 st.session_state.strategie = strat_v
                 st.session_state.mode_debug = mode_debug
-                # Sauvegarde du contexte institutionnel
                 st.session_state.matiere_nom = matiere_choisie
                 st.session_state.niveau_nom = niveau_scolaire
-                # Extraction des limites ZPD depuis l'import Python
                 st.session_state.attendus_cours = REFERENTIELS.get(matiere_choisie, {}).get(niveau_scolaire, None)
                 st.session_state.session_active = True
                 st.rerun()
@@ -624,8 +630,8 @@ with st.sidebar:
             st.error(f"Erreur : {e}")
 
     if actif:
-        st.divider()
-        if st.button("🛑 Terminer et voir ma synthèse"): 
+        st.markdown("---")
+        if st.button("🛑 Terminer et voir ma synthèse", use_container_width=True): 
             afficher_bilan()
 
 # --- ZONE DE DISCUSSION ORCHESTRÉE ---
