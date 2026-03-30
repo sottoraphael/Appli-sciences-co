@@ -555,7 +555,7 @@ with st.sidebar:
     st.header("⚙️ Paramètres du cours")
     actif = st.session_state.get("session_active", False)
     
-    # 1. Alignement horizontal pour la Matière et la Classe
+    # 1. Alignement horizontal conservé pour Matière et Classe
     col1, col2 = st.columns(2)
     matieres_dispos = list(REFERENTIELS.keys()) if REFERENTIELS else ["Mathématiques", "Générique"]
     with col1:
@@ -565,18 +565,19 @@ with st.sidebar:
     with col2:
         niveau_scolaire = st.selectbox("Classe", niveaux_scolaires, disabled=actif)
     
-    # 2. Remplacement des boutons radio par un menu déroulant compact
+    # 2. Retour au st.radio avec un texte légèrement plus incisif
     st.markdown("### 🎯 Ton objectif")
     options_scenarios = [
-        "🌱 Je découvre : mémoriser les bases",
+        "🌱 Je découvre : mémoriser pas à pas",
         "🧠 Je révise : tester ma mémoire",
-        "🔍 Je comprends : faire des liens logiques",
-        "⚙️ Je m'entraîne : questions de réflexion",
-        "🎭 Je maîtrise : expliquer à un camarade"
+        "🔍 Je comprends : faire des liens",
+        "⚙️ Je m'entraîne : questions difficiles",
+        "🎭 Je maîtrise : expliquer le cours"
     ]
-    choix_scenario = st.selectbox("Situation", options_scenarios, disabled=actif, label_visibility="collapsed")
+    # Le label_visibility="collapsed" évite d'afficher un double titre
+    choix_scenario = st.radio("Situation", options_scenarios, disabled=actif, label_visibility="collapsed")
     
-    # Mapping cognitif : Traduction du scénario vers les variables système
+    # Mapping cognitif préservé
     if "découvre" in choix_scenario:
         niv_e, obj_e, strat_v = "Novice", "Mode A : Mémorisation", "Classique"
     elif "révise" in choix_scenario:
@@ -588,7 +589,7 @@ with st.sidebar:
     elif "maîtrise" in choix_scenario:
         niv_e, obj_e, strat_v = "Avancé", "Mode B : Compréhension", "Effet_Protege"
     
-    # 3. Source du cours avec alignement horizontal
+    # 3. Source du cours (alignement horizontal conservé)
     st.markdown("### 🧭 Support de cours")
     source = st.radio("Source", ["Fichier PDF", "Texte libre"], disabled=actif, horizontal=True, label_visibility="collapsed")
     
@@ -597,14 +598,13 @@ with st.sidebar:
         txt_f = None
     else:
         pdf_f = None
-        # Hauteur réduite pour éviter de forcer le défilement
         txt_f = st.text_area("Colle ton texte ici :", height=120, disabled=actif)
     
     mode_debug = st.checkbox("Activer le mode Debug (IA)", value=False, disabled=actif)
     
     pret_a_demarrer = (pdf_f is not None) or (txt_f is not None and len(txt_f.strip()) > 10)
     
-    st.write("") # Léger espacement avant le bouton final
+    st.write("") 
     if st.button("🚀 Démarrer la session", disabled=actif or not pret_a_demarrer, type="primary", use_container_width=True):
         try:
             api_key = st.secrets["GOOGLE_API_KEY"]
