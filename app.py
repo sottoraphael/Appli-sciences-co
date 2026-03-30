@@ -703,7 +703,6 @@ if st.session_state.get("session_active"):
                     for part in res.candidates[0].content.parts:
                         if part.function_call and part.function_call.name == "verifier_calcul_formel":
                             fc = part.function_call
-                            # CORRECTION STRICTE : Extraction sécurisée des arguments (Compatible MapComposite)
                             args = {}
                             try:
                                 for key in fc.args:
@@ -711,12 +710,20 @@ if st.session_state.get("session_active"):
                             except Exception:
                                 pass
                             
+                            # Exécution de la vérification symbolique
                             v_res = verifier_calcul_formel(args.get("expression_prof", ""), args.get("expression_eleve", ""))
                             
-                            part_response = genai.protos.Part(function_response=genai.protos.FunctionResponse(name="verifier_calcul_formel", response=v_res))
+                            # CORRECTION STRICTE : Sérialisation du dictionnaire Python en structure Protobuf
+                            from google.protobuf import struct_pb2
+                            s = struct_pb2.Struct()
+                            s.update(v_res)
+                            
+                            # Construction de la réponse d'outil validée
+                            part_response = genai.protos.Part(function_response=genai.protos.FunctionResponse(name="verifier_calcul_formel", response=s))
                             contexte.append(res.candidates[0].content)
                             contexte.append({"role": "user", "parts": [part_response]})
                             
+                            # Relance de l'inférence pour générer le feedback JSON
                             res = modele.generate_content(contexte)
                             break
 
