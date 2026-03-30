@@ -556,14 +556,14 @@ with st.sidebar:
     st.markdown("<h3 style='margin-top: -40px;'>⚙️ Paramètres du cours</h3>", unsafe_allow_html=True)
     actif = st.session_state.get("session_active", False)
     
-    # 1. Retour à l'empilement vertical pour garantir une lisibilité complète
+    # 1. Empilement vertical pour Matière et Classe
     matieres_dispos = list(REFERENTIELS.keys()) if REFERENTIELS else ["Mathématiques", "Générique"]
     matiere_choisie = st.selectbox("Matière", matieres_dispos, disabled=actif)
     
     niveaux_scolaires = list(REFERENTIELS.get(matiere_choisie, {}).keys()) if REFERENTIELS else ["6ème", "5ème", "4ème", "3ème"]
     niveau_scolaire = st.selectbox("Classe", niveaux_scolaires, disabled=actif)
     
-    # 2. Scénarios (Radio)
+    # 2. Scénarios (Menu déroulant avec vos phrases concises)
     st.markdown("### 🎯 Ton objectif")
     options_scenarios = [
         "🌱 Je découvre : mémoriser pas à pas",
@@ -572,9 +572,9 @@ with st.sidebar:
         "⚙️ Je m'entraîne : questions difficiles",
         "🎭 Je maîtrise : expliquer le cours"
     ]
-    choix_scenario = st.radio("Situation", options_scenarios, disabled=actif, label_visibility="collapsed")
+    choix_scenario = st.selectbox("Situation", options_scenarios, disabled=actif, label_visibility="collapsed")
     
-    # Mapping cognitif
+    # Mapping cognitif ajusté
     if "découvre" in choix_scenario:
         niv_e, obj_e, strat_v = "Novice", "Mode A : Mémorisation", "Classique"
     elif "révise" in choix_scenario:
