@@ -205,9 +205,9 @@ class AgentCritique:
     def analyser(self, texte_reponse):
         # 1. Prévention de la surcharge en mémoire de travail (Charge extrinsèque)
         doc = self.nlp(texte_reponse)
-        phrases_longues = [sent.text for sent in doc.sents if len([t for t in sent if not t.is_punct]) > 30]
+        phrases_longues = [sent.text for sent in doc.sents if len([t for t in sent if not t.is_punct]) > 45]
         if phrases_longues:
-            return False, f"Surcharge cognitive détectée. Ta phrase dépasse 30 mots (empan mnésique saturé). Scinde tes idées en phrases plus courtes."
+            return False, f"Surcharge cognitive détectée. Ta phrase dépasse 45 mots (empan mnésique saturé). Scinde tes idées en phrases plus courtes."
 
         # 2. Prévention des obstacles épistémologiques (Didactique des nombres relatifs)
         for token in doc:
@@ -689,14 +689,39 @@ if st.session_state.get("session_active"):
                 except Exception as e:
                     st.error(f"Erreur d'initialisation JSON : {e}")
 
+    # ==========================================
+    # MODULE DE CALIBRATION MÉTACOGNITIVE
+    # ==========================================
+    certitude = None
+    # La jauge n'est sollicitée que pour les tâches d'ancrage (Mode A)
+    if "Mémorisation" in st.session_state.objectif:
+        st.markdown("<div class='syntax-help'>🚦 <b>Auto-évaluation :</b> Avant de valider, évalue la fiabilité de ta réponse.</div>", unsafe_allow_html=True)
+        certitude = st.radio(
+            "Certitude",
+            ["🎲 Au hasard", "🤔 Douteux", "✅ Certain"],
+            index=None, # Force un choix actif de la part de l'élève
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+
     # Interaction Élève -> Modèle
-    if query := st.chat_input("Ta réponse..."):
+    if query := st.chat_input("Ex: La réponse est 2x au carré..."):
+        
+        # Affichage de la réponse de l'élève dans l'interface
         st.chat_message("user").markdown(query)
         st.session_state.messages.append({"role": "user", "content": query})
         
         with st.chat_message("model"):
             with st.spinner("Analyse cognitive en cours..."):
-                # 1. JUGE DÉTERMINISTE (REGEX QCM)
+                
+                # 1. INJECTION DE LA DONNÉE MÉTACOGNITIVE
+                consigne_metacognitive = ""
+                if certitude:
+                    consigne_metacognitive = f"\n\n[Certitude de l'élève : {certitude}]"
+                elif "Mémorisation" in st.session_state.objectif:
+                    consigne_metacognitive = f"\n\n[Certitude de l'élève : Non évaluée (Oubli de saisie)]"
+
+                # 2. JUGE DÉTERMINISTE (REGEX QCM)
                 attendu = st.session_state.get("lettre_attendue", "NA")
                 consigne_juge = ""
                 if attendu in ["A", "B", "C", "D"]:
@@ -708,9 +733,10 @@ if st.session_state.get("session_active"):
                         else:
                             consigne_juge = f"\n\n<juge_deterministe>INTERVENTION SYMBOLIQUE : L'élève a choisi {l_eleve}. C'est FAUX (la bonne était {attendu}). Applique un feedback de processus strict.</juge_deterministe>"
 
-                contexte = generer_contexte_optimise(query + consigne_juge)
+                # Concaténation de la réponse, du juge et de la jauge de certitude
+                contexte = generer_contexte_optimise(query + consigne_juge + consigne_metacognitive)
                 
-                # 2. APPEL IA (SYMPY TOOL CALLING)
+                # 3. APPEL IA (SYMPY TOOL CALLING)
                 res = modele.generate_content(contexte)
                 if res.candidates and res.candidates[0].content.parts:
                     for part in res.candidates[0].content.parts:
@@ -726,7 +752,7 @@ if st.session_state.get("session_active"):
                             # Exécution de la vérification symbolique
                             v_res = verifier_calcul_formel(args.get("expression_prof", ""), args.get("expression_eleve", ""))
                             
-                            # CORRECTION STRICTE : Sérialisation du dictionnaire Python en structure Protobuf
+                            # Sérialisation du dictionnaire Python en structure Protobuf
                             from google.protobuf import struct_pb2
                             s = struct_pb2.Struct()
                             s.update(v_res)
@@ -740,23 +766,20 @@ if st.session_state.get("session_active"):
                             res = modele.generate_content(contexte)
                             break
 
-                # 3. FILTRE EXÉCUTIF LOCAL (spaCy) ET AUTO-CORRECTION
+                # 4. FILTRE EXÉCUTIF LOCAL (spaCy) ET AUTO-CORRECTION
                 try:
-                    # Utilisation sécurisée pour contourner l'erreur whichOneof
                     texte_json = extraire_json_securise(res)
                     reflexion = ReflexionTuteur.model_validate_json(texte_json)
                     texte_final = reflexion.reponse_visible
                     
                     est_valide, motif_rejet = agent_critique.analyser(texte_final)
                     
-                    # Boucle de correction interne si surcharge cognitive ou aberration didactique
                     if not est_valide:
                         contexte.append(res.candidates[0].content)
                         alerte = f"\n\n<alerte_inhibition>ATTENTION (INHIBITION SYMBOLIQUE) : {motif_rejet} Corrige le champ 'reponse_visible' en conséquence (Garde le format JSON strict).</alerte_inhibition>"
                         contexte.append({"role": "user", "parts": [alerte]})
                         
                         res_corrige = modele.generate_content(contexte)
-                        # Utilisation sécurisée après l'alerte
                         texte_json_corrige = extraire_json_securise(res_corrige)
                         reflexion = ReflexionTuteur.model_validate_json(texte_json_corrige)
                         texte_final = reflexion.reponse_visible
@@ -775,5 +798,4 @@ if st.session_state.get("session_active"):
                     
                     if st.session_state.get("mode_debug"): st.rerun()
                 except Exception as e:
-                    # Message de repli strict et bienveillant pour préserver l'UX
                     st.markdown("Oups, mon système de réflexion a eu un petit hoquet de formatage. Pourrais-tu reformuler ta réponse s'il te plaît ?")
