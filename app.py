@@ -5,6 +5,7 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold  # NOUVEL
 import PyPDF2
 import time
 import json
+import tempfile
 import re
 import sys
 import subprocess
@@ -165,6 +166,15 @@ def extraire_json_securise(reponse):
         })
 
     return texte_propre
+
+def compiler_latex_en_pdf(code_latex_brut):
+    """Extrait le code LaTeX généré par l'IA et le compile en PDF via un environnement isolé."""
+    
+    # Nettoyage : retirer les balises Markdown éventuelles générées par le LLM
+    code_propre = code_latex_brut
+    match = re.search(r"
+http://googleusercontent.com/immersive_entry_chip/0
+
 # ==========================================
 # DÉLÉGATION NEURO-SYMBOLIQUE (SYMPY)
 # ==========================================
