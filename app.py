@@ -698,14 +698,14 @@ if st.session_state.get("session_active"):
         st.markdown("<div class='syntax-help'>🚦 <b>Auto-évaluation :</b> Avant de valider, évalue la fiabilité de ta réponse.</div>", unsafe_allow_html=True)
         certitude = st.radio(
             "Certitude",
-            ["🎲 Au hasard", "🤔 Douteux", "✅ Certain"],
+            ["🎲 Je réponds au hasard", "🤔 J'ai un doute", "✅ Je suis certain.e"],
             index=None, # Force un choix actif de la part de l'élève
             horizontal=True,
             label_visibility="collapsed"
         )
 
     # Interaction Élève -> Modèle
-    if query := st.chat_input("Ex: La réponse est 2x au carré..."):
+    if query := st.chat_input("Ex: La réponse est ..."):
         
         # Affichage de la réponse de l'élève dans l'interface
         st.chat_message("user").markdown(query)
