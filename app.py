@@ -250,20 +250,24 @@ def afficher_bilan():
                 role = "user" if msg["role"] == "user" else "model"
                 historique_complet.append({"role": role, "parts": [msg["content"]]})
                 
-            instruction_metacognitive = """Tu es un coach pédagogique. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
-            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes.
+            instruction_metacognitive = """Tu es un coach pédagogique expert en sciences cognitives. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
+            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes. N'utilise aucune formule introductive du type "Voici ton bilan" ou "D'après nos échanges". Entre directement dans le vif du sujet.
+            
+            Analyse l'historique de la conversation, et croise impérativement les réponses mathématiques/conceptuelles avec les balises [Certitude de l'élève : ...] pour évaluer sa capacité à s'auto-évaluer (sa calibration).
+            
             Structure obligatoirement ton bilan ainsi :
-            1. 🎯 Tes acquis : Va droit au but sur ce qui est su et ce qui reste à revoir (très bref).
-            2. 💡 Tes erreurs : Dédramatise et donne LA stratégie précise à utiliser la prochaine fois (1 phrase).
+            1. 🎯 Tes acquis : Résume factuellement le concept majeur qui est maîtrisé et celui qui reste fragile.
+            2. 💡 Tes erreurs : Dédramatise et donne LA stratégie cognitive ou procédurale précise à utiliser pour éviter l'erreur la plus fréquente de cette session.
+            3. 🚦 Ta lucidité (Calibration) : Évalue explicitement sa capacité d'auto-évaluation. Signale s'il y a eu un excès de confiance (surconfiance), un manque de confiance sur des méthodes justes (sous-confiance), ou s'il s'évalue avec grande justesse.
             """
 
             if "Mode A" in st.session_state.objectif:
-                instruction_metacognitive += """3. ⏳ Le piège de la relecture : Rappelle en 1 courte phrase que relire le cours donne l'illusion de savoir (biais de fluence) et que seul l'effort de mémoire compte.
-            4. 📝 Prochaine étape : Suggère en 1 courte phrase de faire à la maison exactement comme aujourd'hui : cacher son cours et forcer son cerveau à retrouver les informations sur une feuille blanche.
+                instruction_metacognitive += """4. ⏳ Le piège cognitif : Rappelle factuellement que relire le cours donne l'illusion de savoir (biais de fluence) et que seul l'effort de mémoire renforce les connexions neuronales.
+            5. 📝 Prochaine étape (Spaced Practice) : Suggère de faire à la maison exactement comme aujourd'hui : prendre une feuille blanche, cacher son cours et forcer son cerveau à retrouver les informations.
             """
             else:
-                instruction_metacognitive += """3. ⏳ Le piège de la correction : Rappelle en 1 courte phrase que lire une correction donne l'illusion d'avoir compris. La vraie compréhension, c'est savoir l'expliquer soi-même.
-            4. 📝 Prochaine étape : Suggère en 1 courte phrase de faire à la maison exactement comme aujourd'hui : reprendre un exercice et expliquer la méthode à voix haute comme à un camarade, ou chercher les erreurs.
+                instruction_metacognitive += """4. ⏳ Le piège cognitif : Rappelle factuellement que lire une correction donne l'illusion d'avoir compris. La vraie compréhension se mesure à la capacité de l'expliquer soi-même.
+            5. 📝 Prochaine étape (Spaced Practice) : Suggère de reprendre l'exercice dans quelques jours à la maison et d'expliquer la méthode à voix haute, comme s'il devait l'enseigner à un camarade.
             """
 
             model_bilan = genai.GenerativeModel("gemini-3-flash-preview", system_instruction=instruction_metacognitive)
