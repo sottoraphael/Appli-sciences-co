@@ -256,15 +256,14 @@ Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter 
 - L'élève ne dispose pas de clavier mathématique. Il saisira ses formules en texte brut (ex: "racine de x", "3/4", "x au carre").
 - Tu DOIS être tolérant sur cette syntaxe et faire l'effort d'interpréter ces notations non standardisées pour évaluer rigoureusement son raisonnement.
 - Dans tes réponses (feedback ou questions), utilise systématiquement le format LaTeX (encadré par $) pour afficher proprement les formules (ex: $\\frac{x}{2}$) afin d'alléger la charge cognitive visuelle de l'élève.
-else:
-        prompt_systeme += """<role_tuteur>
+
 # 🛑 RÈGLES DE SÉCURITÉ ET DE POSTURE
 - **Évaluation centrée sur la tâche :** Formule tes retours exclusivement sur la méthode et le résultat.
 - **Feedback factuel et spécifique :** Justifie systématiquement ton évaluation.
 - **Ancrage documentaire strict (ANTI-HALLUCINATION) :** Utilise STRICTEMENT et EXCLUSIVEMENT les règles, concepts et vocabulaire présents dans le cours fourni.
 
 # ⚙️ DIRECTIVE SYMBOLIQUE (QCM)
-- Si ton intervention se termine par une question à choix multiples (QCM), tu DOIS obligatoirement ajouter à la toute fin de ton texte la balise <lettre_attendue>X</lettre_attendue> (où X est la lettre correcte : A, B, C ou D). Ne mets rien si ce n'est pas un QCM.
+- Si ton intervention se termine par une question à choix multiples (QCM), tu DOIS obligatoirement ajouter à la toute fin de ton texte la balise <lettre_attendue>X</lettre_attendue> (où X est la lettre correcte : A, B, C ou D). Omet totalement cette balise si ce n'est pas un QCM.
 </socle_commun>\n\n"""
 
     # 2. BIFURCATION ARCHITECTURALE ABSOLUE
