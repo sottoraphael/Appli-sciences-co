@@ -97,79 +97,118 @@ if not st.session_state.tutoriel_vu:
 # ==========================================
 # GÉNÉRATION DE LA FICHE MÉMO
 # ==========================================
-# Le prompt ne contient plus de balise {COURS_TEXTE} pour éviter le conflit avec les accolades LaTeX
-PROMPT_FICHE_MEMO = """
+PROMPT_FICHE_MEMO = r"""
 # RÔLE & OBJECTIF
 Agis en expert en sciences cognitives appliquées à la pédagogie (spécialiste de la Mémorisation Active).
-Ta mission : Transformer le cours fourni en une **Fiche de Mémorisation Active** (Fiche Mémo) au format LaTeX.
+Ta mission : Transformer le cours de mathématiques fourni en une **Fiche de Mémorisation Active** (Fiche Mémo) au format LaTeX.
 
 # 1. RÈGLES DE STRUCTURE (L'Ossature)
-- **Fidélité au cours** : Repère les "Objectifs d'apprentissage" ou les grandes parties du texte. Chaque objectif doit devenir un titre de section distinct dans le tableau.
-- **Pagination automatique** : Utilise l'environnement `longtable` fourni dans le gabarit pour que le tableau s'étende naturellement sur plusieurs pages si nécessaire.
+- **Fidélité au cours** : Repère les "Objectifs d'apprentissage" ou les grandes parties du texte. Chaque objectif doit devenir un titre de section distinct dans le tableau (bandeau bleu).
+- **Mise en page** : Le gabarit utilise `xltabular` pour gérer automatiquement la pagination si le tableau dépasse une page. Ne force pas de sauts de page manuels.
 
 # 2. RÈGLES DE CONTENU (Le Cerveau)
 Applique strictement ces principes issus des sciences cognitives :
 
-- **Principe d'Information Minimale (CRUCIAL)** : 1 Ligne = 1 Seule Notion Atomique.
+### A. Filtre de l'essentiel et Ciblage (CRUCIAL)
+- **Synthèse et Abstraction** : Ne transforme pas chaque exemple ou exercice du cours en question. Extraits uniquement les concepts fondamentaux.
+- **Exemple Canonique Unique** : S'il y a une procédure de calcul, choisis UN SEUL exemple représentatif pour l'illustrer. Ignore toutes les autres situations d'application (ex: ne pas répéter la procédure pour 5 fonctions différentes).
+- **Limite quantitative** : La fiche doit être synthétique. Génère un maximum absolu de 15 à 20 questions au total pour l'ensemble du cours.
 
-- **CIBLAGE UNIQUE** : Formule des questions appelant un seul élément de réponse.
+### B. Principe d'Information Minimale
+- **1 Ligne = 1 Seule Notion Atomique**.
+- **INTERDIT** : Demander une liste complète (ex: "Quelles sont les 3 propriétés ?").
+- **OBLIGATOIRE** : Créer 3 lignes distinctes (une pour chaque propriété). La réponse doit être vérifiable instantanément (max 15-20 mots).
+- **Exception Procédurale** : Ne fragmente pas excessivement un calcul. Une résolution d'équation simple peut tenir sur une ligne pour préserver le schéma cognitif global de l'élève.
 
-- **Typologie des Questions** : Varie entre questions sémantiques, procédurales, de discrimination et de complétion.
+### C. Typologie des Questions (Traitement Profond)
+Varie les types de questions pour stimuler l'apprentissage :
+1.  **Questions Sémantiques (Savoir)** :
+    * *Définition inversée* : "Comment appelle-t-on..." (plutôt que "Qu'est-ce que...").
+    * *Association* : "Quel outil mathématique permet de... ?".
+2.  **Questions Procédurales (Savoir-faire)** :
+    * *Amorce* : "Par quelle étape commence-t-on pour... ?".
+    * *Condition* : "À quelle condition peut-on utiliser... ?".
+3.  **Questions de Discrimination (Pièges & Choix)** :
+    * *Choix forcé* : "Dans ce cas précis : Sinus ou Cosinus ?".
+    * *Diagnostic* : "Pourquoi ce résultat est impossible ?".
+4.  **Questions de Complétion (Rappel indicé)** :
+    * Utilise des textes à trous pour les formules complexes : "La formule est : $v = \frac{...}{...}$".
 
-- **LE FEEDBACK DE PROCESSUS** : La 4ème colonne "Stratégie" sert exclusivement à guider la pensée en maintenant la réponse directe masquée (cibler la méthode, spécifique, engagement actif, non-jugeant).
-
-- **Procédures & Calculs** : Décris la méthode étape par étape. Exemple Numérique OBLIGATOIRE sur une ligne dédiée.
+### D. LE FEEDBACK DE PROCESSUS (Cœur de la fiche)
+La 4ème colonne "Stratégie" ne sert pas à donner la réponse, mais à **guider la pensée**.
+Respecte ces 4 piliers :
+1.  **Cibler la méthode** : Explique le "comment" (stratégie, raisonnement) plutôt que le résultat.
+    * *Ex: "Vérifie l'ordonnée à l'origine sur l'axe vertical."*
+2.  **Spécifique & Informatif** : Relie la réussite à une cause précise.
+    * *Ex: "Attention, l'erreur vient souvent de l'oubli du signe négatif."*
+3.  **Engagement Actif** : Pose une question en retour.
+    * *Ex: "As-tu bien identifié le coefficient directeur ?"*
+4.  **Non-Jugeant** :
+    * **INTERDIT** : Jugements de valeur ("Bravo", "C'est facile", "Fais attention").
+    * **OBLIGATOIRE** : Dédramatiser l'erreur ("C'est un piège classique de modélisation").
 
 # 3. RÈGLES TECHNIQUES (Le Code)
-
 - **Gabarit** : Utilise STRICTEMENT le code LaTeX ci-dessous.
-
-- **Maths** : Place toujours les formules et nombres dans des balises $ ... $. Échappe les caractères spéciaux (%, &, #).
-
+- **Commandes** : `\caseseval` pour les cases. `\multicolumn` pour les titres.
+- **Maths** : Jamais de `\hat` ou symboles math hors des balises `$ ... $`. Échappe les caractères spéciaux (%, &).
 - **Anti-Hallucination** : Base-toi uniquement sur le cours fourni.
+- **Sortie** : Ne génère QUE le code LaTeX brut, sans aucune balise Markdown autour.
 
-- **Règle absolue** : Produis exclusivement le code LaTeX brut. Commence directement par \\documentclass et termine exactement par \\end{document}.
+# GABARIT DE SORTIE
+\documentclass[a4paper,10pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage[table]{xcolor}
+\usepackage{geometry}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{fontawesome5}
+\usepackage{xltabular}
 
-\\documentclass[a4paper,11pt]{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage[T1]{fontenc}
-\\usepackage[french]{babel}
-\\usepackage{geometry}
-\\usepackage{amssymb}
-\\usepackage{amsmath}
-\\usepackage{longtable}
-\\usepackage{array}
-\\geometry{hmargin=1cm, vmargin=1.5cm}
-\\begin{document}
-\\begin{center}
+\geometry{hmargin=0.8cm, vmargin=1.5cm}
 
-    \\LARGE \\textbf{FICHE DE RÉVISION ACTIVE}\\\\[0.5em]
+% Commande 6 cases sur 2 lignes
+\newcommand{\caseseval}{%
+    \centering
+    $\square\;\square\;\square$ \\
+    \vspace{2mm}
+    $\square\;\square\;\square$
+}
+\renewcommand{\tabularxcolumn}[1]{m{#1}}
 
-    \\large \\textbf{Auto-évaluation et Entraînement}
+\begin{document}
 
-\\end{center}
-\\vspace{0.5cm}
-\\renewcommand{\\arraystretch}{1.8}
-\\begin{longtable}{|p{2.5cm}|p{4.5cm}|p{4.5cm}|p{4.5cm}|}
-    \\hline
-    \\centering\\textbf{Auto-éval.} & \\centering\\textbf{Question} & \\centering\\textbf{Réponse} & \\centering\\textbf{Stratégie / Conseil} \\tabularnewline
-    \\hline
-    \\endhead
+\begin{center}
+    \LARGE \textbf{\textcolor{orange!80!black}{\faBookOpen} \quad FICHE MÉMO}\\[0.5em]
+    \large \textbf{Révision Active - L'Essentiel du Cours}
+\end{center}
+
+\vspace{0.2cm}
+
+\renewcommand{\arraystretch}{2.2}
+\begin{xltabular}{\textwidth}{|m{2cm}|X|X|X|}
+    \hline
+    \rowcolor{gray!10}
+    \centering \scriptsize \textbf{\textcolor{red}{\faTimes}/\textcolor{green!60!black}{\faCheck} Auto-évaluation} &
+    \centering \textbf{\textcolor{blue!70!black}{\faQuestionCircle} Question} &
+    \centering \textbf{\textcolor{red!70!black}{\faBullseye} Réponse} &
+    \centering \textbf{\textcolor{orange!90!black}{\faLightbulb} Stratégie / Conseil} \arraybackslash \\
+    \hline
+    \endhead
 
     % --- GESTION DES OBJECTIFS ---
+    % Répète ce bloc pour chaque objectif fondamental identifié dans le cours
+    \multicolumn{4}{|c|}{\cellcolor{blue!10}\parbox{\dimexpr\textwidth-10pt\relax}{\centering \textit{\textbf{Objectif : {{INTITULÉ_OBJECTIF}}}}}} \\
+    \hline
+    
+    \caseseval & {{QUESTION_ATOMIQUE}} & {{REPONSE_COURTE}} & \footnotesize \textit{{{FEEDBACK_PROCESSUS}}} \\ \hline
+    
+    % Exemple canonique numérique si applicable :
+    % \caseseval & Exemple : {{DONNEES}} & {{RESULTAT}} & \footnotesize \textit{{{METHODE_EXPLICITE}}} \\ \hline
 
-    \\multicolumn{4}{|c|}{\\textbf{Objectif : {{INTITULÉ_OBJECTIF}}}} \\tabularnewline
-
-    \\hline 
-
-    \\centering $\\square\\ \\square\\ \\square$ & {{QUESTION_ATOMIQUE}} & {{REPONSE_COURTE}} & \\footnotesize \\textit{{{FEEDBACK_PROCESSUS}}} \\tabularnewline
-
-    \\hline
-
-\\end{longtable}
-
-\\end{document}
-
+\end{xltabular}
+\end{document}
 """
 def traiter_generation_fiche():
     """Coordonne la génération LLM, l'extraction du bloc formel et la compilation."""
