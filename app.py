@@ -562,12 +562,14 @@ def extraire_texte_pdf(uploaded_file):
 def generer_contexte_optimise(nouvel_input):
     contents = []
     
-    # Injection systématique de la base de connaissances (cours intégral)
+    # Injection sécurisée de la base de connaissances (limitée pour éviter la saturation API)
     if st.session_state.texte_cours_integral:
-        contents.append({"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]})
-        contents.append({"role": "model", "parts": ["J'ai bien mémorisé l'intégralité de la base de connaissances. Je suis prêt à formuler mes questions en me basant strictement sur ce contenu."] })
+        # On ne prend que les 10 000 premiers caractères pour garantir la stabilité du JSON
+        texte_limite = st.session_state.texte_cours_integral[:10000] 
+        contents.append({"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS (Extrait ciblé) :\n{texte_limite}"]})
+        contents.append({"role": "model", "parts": ["J'ai bien mémorisé le contenu du cours. Je suis prêt à formuler mes questions en me basant strictement sur ces informations."] })
 
-    # Ajout de l'historique conversationnel récent (en filtrant les données Meta pour l'historique Gemini)
+    # Ajout de l'historique conversationnel récent
     messages_api = [m for m in st.session_state.messages if not m.get("isMeta")]
     historique_recent = messages_api[-MAX_HISTORIQUE_MESSAGES:]
     for msg in historique_recent:
