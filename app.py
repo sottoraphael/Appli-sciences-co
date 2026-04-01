@@ -191,7 +191,7 @@ def afficher_bilan():
             5. 📝 Prochaine étape : Suggère de reprendre l'exercice dans quelques jours et d'expliquer la méthode à voix haute.
             """
 
-            model_bilan = genai.GenerativeModel("gemini-2.0-flash", system_instruction=instruction_metacognitive)
+            model_bilan = genai.GenerativeModel("gemini-2.5-flash", system_instruction=instruction_metacognitive)
             chat_bilan = model_bilan.start_chat(history=historique_complet)
             
             try:
@@ -438,7 +438,7 @@ def initialiser_modele(api_key, niveau, objectif, strategie, attendus=None, mati
     instructions = generer_prompt_systeme(niveau, objectif, strategie, attendus, matiere_nom, niveau_nom)
     
     return genai.GenerativeModel(
-        model_name="gemini-2.0-flash", 
+        model_name="gemini-2.5-flash", 
         system_instruction=instructions,
         tools=[verifier_calcul_formel], 
         safety_settings={
