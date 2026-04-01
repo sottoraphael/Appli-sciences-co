@@ -94,16 +94,13 @@ if not st.session_state.tutoriel_vu:
     afficher_tutoriel()
 
 # ==========================================
-# GÉNÉRATION DE LA FICHE MÉMO (NOUVEAU)
+# GÉNÉRATION DE LA FICHE MÉMO
 # ==========================================
+# Le prompt ne contient plus de balise {COURS_TEXTE} pour éviter le conflit avec les accolades LaTeX
 PROMPT_FICHE_MEMO = """
 # RÔLE & OBJECTIF
 Agis en expert en sciences cognitives appliquées à la pédagogie (spécialiste de la Mémorisation Active).
 Ta mission : Transformer le cours fourni en une **Fiche de Mémorisation Active** (Fiche Mémo) au format LaTeX.
-
-# ENTRÉES
-Cours à traiter :
-{COURS_TEXTE}
 
 # 1. RÈGLES DE STRUCTURE (L'Ossature)
 - **Fidélité au cours** : Repère les "Objectifs d'apprentissage" ou les grandes parties du texte. Chaque objectif doit devenir un titre de section distinct dans le tableau.
@@ -167,18 +164,18 @@ def traiter_generation_fiche():
     """Gère l'appel API, le nettoyage regex et la compilation de la fiche mémo."""
     try:
         model = genai.GenerativeModel("gemini-2.5-flash") 
-        prompt_final = PROMPT_FICHE_MEMO.format(COURS_TEXTE=st.session_state.texte_cours_integral)
+        # Utilisation de la concaténation simple pour protéger la syntaxe LaTeX
+        prompt_final = PROMPT_FICHE_MEMO + "\n\n# ENTRÉES\nCours à traiter :\n" + st.session_state.texte_cours_integral
         
         with st.spinner("Construction de la fiche par l'IA..."):
             response = model.generate_content(prompt_final)
             raw_latex = response.text
             
-            # Nettoyage : Extraction stricte du bloc LaTeX 
             clean_latex = re.sub(r"```latex|```", "", raw_latex).strip()
             
             if "\\documentclass" not in clean_latex:
                 st.error("Format LaTeX invalide généré par l'IA. Merci de réessayer.")
-                return
+                return False # On retourne False pour bloquer le st.rerun()
 
             pdf_bytes = generer_pdf_bytes(
                 clean_latex, 
@@ -188,10 +185,11 @@ def traiter_generation_fiche():
             )
             
             st.session_state.fiche_memo_pdf = pdf_bytes
-            st.success("Fiche mémo compilée avec succès !")
+            return True # Succès confirmé
             
     except Exception as e:
         st.error(f"Erreur lors de la génération : {str(e)}")
+        return False
 
 # ==========================================
 # DÉLÉGATION NEURO-SYMBOLIQUE (SYMPY)
@@ -671,8 +669,10 @@ with st.sidebar:
         
         if st.session_state.fiche_memo_pdf is None:
             if st.button("📝 Générer ma Fiche Mémo", use_container_width=True):
-                traiter_generation_fiche()
-                st.rerun()
+                # Le rerun ne s'exécute que si la génération est un succès avéré
+                succes_generation = traiter_generation_fiche()
+                if succes_generation:
+                    st.rerun()
         else:
             st.download_button(
                 label="📥 Télécharger ma Fiche (PDF)",
