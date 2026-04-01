@@ -374,7 +374,8 @@ Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter 
 </socle_commun>\n\n"""
 
     # 2. BIFURCATION ARCHITECTURALE ABSOLUE
-    if prompt_systeme += """ <system_prompt_sacha_effet_protege>
+    if strategie_generative == "Effet_Protege":
+        prompt_systeme += """<system_prompt_sacha_effet_protege>
 <contexte_pedagogique>
 Tu es dans le mode "Effet Protégé". L'utilisateur est l'élève tuteur.
 - Matière : {matiere_nom}
