@@ -256,7 +256,8 @@ Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter 
 - L'élève ne dispose pas de clavier mathématique. Il saisira ses formules en texte brut (ex: "racine de x", "3/4", "x au carre").
 - Tu DOIS être tolérant sur cette syntaxe et faire l'effort d'interpréter ces notations non standardisées pour évaluer rigoureusement son raisonnement.
 - Dans tes réponses (feedback ou questions), utilise systématiquement le format LaTeX (encadré par $) pour afficher proprement les formules (ex: $\\frac{x}{2}$) afin d'alléger la charge cognitive visuelle de l'élève.
-
+else:
+        prompt_systeme += """<role_tuteur>
 # 🛑 RÈGLES DE SÉCURITÉ ET DE POSTURE
 - **Évaluation centrée sur la tâche :** Formule tes retours exclusivement sur la méthode et le résultat.
 - **Feedback factuel et spécifique :** Justifie systématiquement ton évaluation.
@@ -588,7 +589,15 @@ if st.session_state.get("session_active"):
     if len(st.session_state.messages) == 0:
         with st.chat_message("model"):
             with st.spinner("L'IA prépare sa stratégie pédagogique..."):
-                contexte = generer_contexte_optimise("Salut ! Je suis prêt, commence l'exercice sur le cours en posant une première question.")
+                
+                # NOUVEAU : Bifurcation du premier message caché selon le rôle
+                if st.session_state.strategie == "Effet_Protege":
+                    phrase_amorce = "Salut Sacha ! Je suis prêt à t'aider à réviser. Dis-moi ce que tu n'as pas compris dans le cours pour qu'on commence."
+                else:
+                    phrase_amorce = "Salut ! Je suis prêt, commence l'exercice sur le cours en posant une première question."
+                    
+                contexte = generer_contexte_optimise(phrase_amorce)
+                
                 try:
                     res = modele.generate_content(contexte)
                     texte_brut = res.text
