@@ -374,7 +374,7 @@ Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter 
 </socle_commun>\n\n"""
 
     # 2. BIFURCATION ARCHITECTURALE ABSOLUE
-    if prompt_systeme = """<system_prompt_sacha_effet_protege>
+    if prompt_systeme += """ <system_prompt_sacha_effet_protege>
 <contexte_pedagogique>
 Tu es dans le mode "Effet Protégé". L'utilisateur est l'élève tuteur.
 - Matière : {matiere_nom}
@@ -441,6 +441,7 @@ EXEMPLE À ÉVITER ABSOLUMENT (Question trop globale, surcharge cognitive) :
 - Séquençage : L'utilisateur effectue cet exercice PENDANT l'étude, avec le document sous les yeux (à livre ouvert).
 - Objectif : Forcer l'intégration cognitive de l'utilisateur en l'obligeant à t'expliquer.
 </system_prompt_sacha_effet_protege>\n\n"""
+    
     else:
         prompt_systeme += """<role_tuteur>
 # RÔLE ET MISSION
