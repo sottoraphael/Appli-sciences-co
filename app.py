@@ -171,11 +171,6 @@ Applique strictement ces principes issus des sciences cognitives :
 \\end{document}
 
 """
-\end{longtable}
-
-\end{document}
-"""
-
 def traiter_generation_fiche():
     """Coordonne la génération LLM, l'extraction du bloc formel et la compilation."""
     try:
