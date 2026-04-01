@@ -5,6 +5,7 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import PyPDF2
 import time
 import sys
+import re  
 import subprocess
 import sympy as sp
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
@@ -39,6 +40,7 @@ if "messages" not in st.session_state: st.session_state.messages = []
 if "texte_cours_integral" not in st.session_state: st.session_state.texte_cours_integral = ""
 if "tutoriel_vu" not in st.session_state: st.session_state.tutoriel_vu = False
 if "attendus_cours" not in st.session_state: st.session_state.attendus_cours = None
+if "fiche_memo_pdf" not in st.session_state: st.session_state.fiche_memo_pdf = None
 
 # ==========================================
 # CONNEXION AU RÉFÉRENTIEL SÉCURISÉ
@@ -90,6 +92,106 @@ def afficher_tutoriel():
 
 if not st.session_state.tutoriel_vu:
     afficher_tutoriel()
+
+# ==========================================
+# GÉNÉRATION DE LA FICHE MÉMO (NOUVEAU)
+# ==========================================
+PROMPT_FICHE_MEMO = """
+# RÔLE & OBJECTIF
+Agis en expert en sciences cognitives appliquées à la pédagogie (spécialiste de la Mémorisation Active).
+Ta mission : Transformer le cours fourni en une **Fiche de Mémorisation Active** (Fiche Mémo) au format LaTeX.
+
+# ENTRÉES
+Cours à traiter :
+{COURS_TEXTE}
+
+# 1. RÈGLES DE STRUCTURE (L'Ossature)
+- **Fidélité au cours** : Repère les "Objectifs d'apprentissage" ou les grandes parties du texte. Chaque objectif doit devenir un titre de section distinct dans le tableau.
+- **Pagination automatique** : Utilise l'environnement `longtable` fourni dans le gabarit pour que le tableau s'étende naturellement sur plusieurs pages si nécessaire.
+
+# 2. RÈGLES DE CONTENU (Le Cerveau)
+Applique strictement ces principes issus des sciences cognitives :
+- **Principe d'Information Minimale (CRUCIAL)** : 1 Ligne = 1 Seule Notion Atomique.
+- **CIBLAGE UNIQUE** : Formule des questions appelant un seul élément de réponse.
+- **Typologie des Questions** : Varie entre questions sémantiques, procédurales, de discrimination et de complétion.
+- **LE FEEDBACK DE PROCESSUS** : La 4ème colonne "Stratégie" sert exclusivement à guider la pensée en maintenant la réponse directe masquée (cibler la méthode, spécifique, engagement actif, non-jugeant).
+- **Procédures & Calculs** : Décris la méthode étape par étape. Exemple Numérique OBLIGATOIRE sur une ligne dédiée.
+
+# 3. RÈGLES TECHNIQUES (Le Code)
+- **Gabarit** : Utilise STRICTEMENT le code LaTeX ci-dessous.
+- **Maths** : Place toujours les formules et nombres dans des balises $ ... $. Échappe les caractères spéciaux (%, &, #).
+- **Anti-Hallucination** : Base-toi uniquement sur le cours fourni.
+- **Règle absolue** : Produis exclusivement le code LaTeX brut. Commence directement par \\documentclass et termine exactement par \\end{document}.
+
+\\documentclass[a4paper,11pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage[french]{babel}
+\\usepackage{geometry}
+\\usepackage{amssymb}
+\\usepackage{amsmath}
+\\usepackage{longtable}
+\\usepackage{array}
+
+\\geometry{hmargin=1cm, vmargin=1.5cm}
+
+\\begin{document}
+
+\\begin{center}
+    \\LARGE \\textbf{FICHE DE RÉVISION ACTIVE}\\\\[0.5em]
+    \\large \\textbf{Auto-évaluation et Entraînement}
+\\end{center}
+
+\\vspace{0.5cm}
+
+\\renewcommand{\\arraystretch}{1.8}
+\\begin{longtable}{|p{2.5cm}|p{4.5cm}|p{4.5cm}|p{4.5cm}|}
+    \\hline
+    \\centering\\textbf{Auto-éval.} & \\centering\\textbf{Question} & \\centering\\textbf{Réponse} & \\centering\\textbf{Stratégie / Conseil} \\tabularnewline
+    \\hline
+    \\endhead
+
+    % --- GESTION DES OBJECTIFS ---
+    \\multicolumn{4}{|c|}{\\textbf{Objectif : {{INTITULÉ_OBJECTIF}}}} \\tabularnewline
+    \\hline
+    
+    \\centering $\\square\\ \\square\\ \\square$ & {{QUESTION_ATOMIQUE}} & {{REPONSE_COURTE}} & \\footnotesize \\textit{{{FEEDBACK_PROCESSUS}}} \\tabularnewline
+    \\hline
+
+\\end{longtable}
+
+\\end{document}
+"""
+
+def traiter_generation_fiche():
+    """Gère l'appel API, le nettoyage regex et la compilation de la fiche mémo."""
+    try:
+        model = genai.GenerativeModel("gemini-2.5-flash") 
+        prompt_final = PROMPT_FICHE_MEMO.format(COURS_TEXTE=st.session_state.texte_cours_integral)
+        
+        with st.spinner("Construction de la fiche par l'IA..."):
+            response = model.generate_content(prompt_final)
+            raw_latex = response.text
+            
+            # Nettoyage : Extraction stricte du bloc LaTeX 
+            clean_latex = re.sub(r"```latex|```", "", raw_latex).strip()
+            
+            if "\\documentclass" not in clean_latex:
+                st.error("Format LaTeX invalide généré par l'IA. Merci de réessayer.")
+                return
+
+            pdf_bytes = generer_pdf_bytes(
+                clean_latex, 
+                st.session_state.get("matiere_nom", "Mathématiques"), 
+                st.session_state.get("niveau_nom", "Collège"), 
+                "Fiche Mémo Active"
+            )
+            
+            st.session_state.fiche_memo_pdf = pdf_bytes
+            st.success("Fiche mémo compilée avec succès !")
+            
+    except Exception as e:
+        st.error(f"Erreur lors de la génération : {str(e)}")
 
 # ==========================================
 # DÉLÉGATION NEURO-SYMBOLIQUE (SYMPY)
@@ -561,7 +663,27 @@ with st.sidebar:
             st.error("⚠️ La clé API est introuvable dans l'onglet 'Secrets'.")
         except Exception as e:
             st.error(f"Erreur : {e}")
-
+            
+# --- ZONE : OUTILS DE MÉMORISATION (NOUVEAU) ---
+    if actif and st.session_state.texte_cours_integral:
+        st.markdown("---")
+        st.markdown("### 🛠️ Outils de mémorisation")
+        
+        if st.session_state.fiche_memo_pdf is None:
+            if st.button("📝 Générer ma Fiche Mémo", use_container_width=True):
+                traiter_generation_fiche()
+                st.rerun()
+        else:
+            st.download_button(
+                label="📥 Télécharger ma Fiche (PDF)",
+                data=bytes(st.session_state.fiche_memo_pdf),
+                file_name=f"Fiche_Memo_{st.session_state.matiere_nom}_{st.session_state.niveau_nom}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+            if st.button("🔄 Régénérer la fiche", use_container_width=True):
+                st.session_state.fiche_memo_pdf = None
+                st.rerun()
     if actif:
         st.markdown("---")
         if st.button("🛑 Terminer et voir ma synthèse", use_container_width=True): 
