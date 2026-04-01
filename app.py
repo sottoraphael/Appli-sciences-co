@@ -1,17 +1,13 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold  # NOUVEL IMPORT CIBLE
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import PyPDF2
 import time
-import json
-import tempfile
-import re
 import sys
 import subprocess
 import sympy as sp
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
-from pydantic import BaseModel, Field
 import os
 
 # Imports locaux
@@ -42,7 +38,6 @@ if "session_active" not in st.session_state: st.session_state.session_active = F
 if "messages" not in st.session_state: st.session_state.messages = []
 if "texte_cours_integral" not in st.session_state: st.session_state.texte_cours_integral = ""
 if "tutoriel_vu" not in st.session_state: st.session_state.tutoriel_vu = False
-if "lettre_attendue" not in st.session_state: st.session_state.lettre_attendue = "NA"
 if "attendus_cours" not in st.session_state: st.session_state.attendus_cours = None
 
 # ==========================================
@@ -95,77 +90,7 @@ def afficher_tutoriel():
 
 if not st.session_state.tutoriel_vu:
     afficher_tutoriel()
-# ==========================================
-# SCHÉMAS PYDANTIC (MÉTACOGNITION IA)
-# ==========================================
-class ReflexionTuteur(BaseModel):
-    """Schéma imposant la réflexion avant l'action (Inhibition)."""
-    diagnostic_interne: str = Field(description="Analyse factuelle de la réponse de l'élève et vérification stricte de la faisabilité logique.")
-    lettre_attendue_qcm: str = Field(description="Si ta reponse_visible contient une nouvelle question QCM, indique ici UNIQUEMENT la lettre de la bonne réponse (A, B, C ou D). Sinon, écris 'NA'.")
-    concept_actuel_evalue: str = Field(description="Le concept précis du cours que tu es en train de faire travailler à l'élève dans ton message actuel.")
-    liste_concepts_restants_du_cours: str = Field(description="Analyse l'INTÉGRALITÉ du cours fourni. Écris une CHAÎNE DE CARACTÈRES UNIQUE (pas de tableau) listant les concepts majeurs qu'il te reste à tester ensuite. S'ils ont TOUS été testés, écris exactement le mot 'Aucun'.")
-    strategie_choisie: str = Field(description="Catégorisation stricte de l'intervention (ex: Feedback de Processus, Remédiation, Sacha-Question, etc.).")
-    reponse_visible: str = Field(description="Le texte final adressé à l'élève, respectant le format LaTeX et la Transparence Cognitive.")
 
-# ==========================================
-# FONCTIONS TECHNIQUES ET SÉCURITÉ
-# ==========================================
-def extraire_json_securise(reponse):
-    """
-    Fonction instrumentée pour le débogage. 
-    Affiche l'état interne de l'objet reponse dans le terminal.
-    """
-    import re
-    import json
-    
-    # --- DÉBUT DE LA SONDE DE DÉBOGAGE ---
-    print("\n" + "="*50)
-    print("🔍 DEBUG - ANALYSE DE LA RÉPONSE BRUTE DE L'API")
-    print("="*50)
-    
-    # Vérification des blocages de sécurité au niveau de l'invite (Prompt Feedback)
-    if hasattr(reponse, 'prompt_feedback'):
-        print(f"Blocage du Prompt : {reponse.prompt_feedback}")
-        
-    # Vérification de l'état des candidats générés
-    if hasattr(reponse, 'candidates') and reponse.candidates:
-        candidat = reponse.candidates[0]
-        print(f"Raison d'arrêt (finish_reason) : {candidat.finish_reason}")
-        if hasattr(candidat, 'safety_ratings'):
-             print(f"Évaluations de sécurité : {candidat.safety_ratings}")
-    else:
-        print("ATTENTION : Aucun candidat généré par l'API.")
-    # --- FIN DE LA SONDE DE DÉBOGAGE ---
-
-    texte_complet = ""
-    try:
-        texte_complet = reponse.text
-    except Exception as e:
-        print(f"⚠️ Exception lors de l'accès à reponse.text : {e}")
-        if hasattr(reponse, 'candidates') and reponse.candidates:
-            if hasattr(reponse.candidates[0], 'content') and hasattr(reponse.candidates[0].content, 'parts'):
-                for part in reponse.candidates[0].content.parts:
-                    if hasattr(part, 'text') and part.text:
-                        texte_complet += part.text
-
-    balise = "`" * 3
-    pattern = r"^" + balise + r"(?:json)?|" + balise + r"$"
-    texte_propre = re.sub(pattern, "", texte_complet.strip(), flags=re.MULTILINE).strip()
-
-    print(f"📝 TEXTE BRUT RÉCUPÉRÉ (Longueur: {len(texte_propre)} caractères) :\n'{texte_propre}'")
-    print("="*50 + "\n")
-
-    if not texte_propre:
-        return json.dumps({
-            "diagnostic_interne": "Échec d'extraction de l'inférence ou chaîne vide retournée par l'API.",
-            "lettre_attendue_qcm": "NA",
-            "concept_actuel_evalue": "Initialisation de secours",
-            "liste_concepts_restants_du_cours": "Inconnu",
-            "strategie_choisie": "Remédiation",
-            "reponse_visible": "J'ai rencontré une brève difficulté technique pour analyser ce passage. Pourrions-nous commencer par le premier concept de ton cours ?"
-        })
-
-    return texte_propre
 # ==========================================
 # DÉLÉGATION NEURO-SYMBOLIQUE (SYMPY)
 # ==========================================
@@ -213,26 +138,24 @@ class AgentCritique:
         # 2. Prévention des obstacles épistémologiques (Didactique des nombres relatifs)
         for token in doc:
             if token.text.startswith('-') and token.pos_ == "NUM":
-                # Vérification sur une fenêtre de 3 mots pour anticiper les adjectifs (ex: "-3 petites pommes")
                 fenetre = doc[token.i + 1 : min(token.i + 4, len(doc))]
                 if any(t.pos_ == "NOUN" for t in fenetre):
-                     return False, "Aberration didactique détectée. On ne peut pas posséder une quantité négative d'objets physiques concrêts. Adapte ton analogie pour les nombres relatifs (utilise la température, le solde bancaire ou l'ascenseur)."
+                     return False, "Aberration didactique détectée. On ne peut pas posséder une quantité négative d'objets physiques concrets. Adapte ton analogie pour les nombres relatifs."
 
-        # 3. Filtrage du hors-programme absolu (Respect strict de la Zone Proximale de Développement)
+        # 3. Filtrage du hors-programme absolu
         termes_interdits = {"infini", "dérivée", "intégrale", "asymptote", "logarithme", "limite"}
         lemmas = {token.lemma_.lower() for token in doc}
         intersections = termes_interdits.intersection(lemmas)
         if intersections:
-            return False, f"Hors-programme détecté ({', '.join(intersections)}). L'introduction de ces concepts génère une charge cognitive extrinsèque inutile au collège. Reformule en utilisant strictement les attendus officiels des cycles 3 ou 4."
+            return False, f"Hors-programme détecté ({', '.join(intersections)}). Reformule en utilisant strictement les attendus du collège."
 
         # 4. Protection axiomatique (Division par zéro)
         import re
         if re.search(r'(/|\\div|\\frac\{[^\}]+\})\s*\{?0\}?|\bdivis(é|er)\s+par\s+z[é|e]ro\b', texte_reponse, re.IGNORECASE):
-            return False, "Aberration mathématique majeure. Tu as généré une division par zéro dans ton exemple ou ton calcul. Corrige immédiatement cette structure."
+            return False, "Aberration mathématique majeure. Tu as généré une division par zéro dans ton exemple ou ton calcul. Corrige immédiatement."
 
         return True, ""
 
-# Instanciation de l'agent
 agent_critique = AgentCritique()
 
 # ==========================================
@@ -246,51 +169,45 @@ def afficher_bilan():
             if st.session_state.texte_cours_integral:
                 historique_complet.extend([{"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{st.session_state.texte_cours_integral}"]}, {"role": "model", "parts": ["Compris."] }])
             
-            messages_visibles = [m for m in st.session_state.messages if not m.get("isMeta")]
-            for msg in messages_visibles:
+            for msg in st.session_state.messages:
                 role = "user" if msg["role"] == "user" else "model"
                 historique_complet.append({"role": role, "parts": [msg["content"]]})
                 
             instruction_metacognitive = """Tu es un coach pédagogique expert en sciences cognitives. Fais un bilan métacognitif factuel, ultra-concis et encourageant. Adresse-toi à l'élève avec 'Tu'. Ne pose plus de question.
-            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point. Pas de longs paragraphes. N'utilise aucune formule introductive du type "Voici ton bilan" ou "D'après nos échanges". Entre directement dans le vif du sujet.
-            
-            Analyse l'historique de la conversation, et croise impérativement les réponses mathématiques/conceptuelles avec les balises [Certitude de l'élève : ...] pour évaluer sa capacité à s'auto-évaluer (sa calibration).
+            CONTRAINTE STRICTE : Ton bilan doit être extrêmement bref, visuel et direct. Utilise des listes à puces et limite-toi à 1 ou 2 phrases maximum par point.
             
             Structure obligatoirement ton bilan ainsi :
             1. 🎯 Tes acquis : Résume factuellement le concept majeur qui est maîtrisé et celui qui reste fragile.
             2. 💡 Tes erreurs : Dédramatise et donne LA stratégie cognitive ou procédurale précise à utiliser pour éviter l'erreur la plus fréquente de cette session.
-            3. 🚦 Ta lucidité (Calibration) : Évalue explicitement sa capacité d'auto-évaluation. Signale s'il y a eu un excès de confiance (surconfiance), un manque de confiance sur des méthodes justes (sous-confiance), ou s'il s'évalue avec grande justesse.
+            3. 🚦 Ta lucidité (Calibration) : Évalue explicitement sa capacité d'auto-évaluation en te basant sur ses balises de certitude.
             """
 
             if "Mode A" in st.session_state.objectif:
-                instruction_metacognitive += """4. ⏳ Le piège cognitif : Rappelle factuellement que relire le cours donne l'illusion de savoir (biais de fluence) et que seul l'effort de mémoire renforce les connexions neuronales.
-            5. 📝 Prochaine étape (Spaced Practice) : Suggère de faire à la maison exactement comme aujourd'hui : prendre une feuille blanche, cacher son cours et forcer son cerveau à retrouver les informations.
+                instruction_metacognitive += """4. ⏳ Le piège cognitif : Rappelle factuellement que relire le cours donne l'illusion de savoir et que seul l'effort de mémoire renforce les connexions neuronales.
+            5. 📝 Prochaine étape : Suggère de prendre une feuille blanche, cacher son cours et forcer son cerveau à retrouver les informations.
             """
             else:
                 instruction_metacognitive += """4. ⏳ Le piège cognitif : Rappelle factuellement que lire une correction donne l'illusion d'avoir compris. La vraie compréhension se mesure à la capacité de l'expliquer soi-même.
-            5. 📝 Prochaine étape (Spaced Practice) : Suggère de reprendre l'exercice dans quelques jours à la maison et d'expliquer la méthode à voix haute, comme s'il devait l'enseigner à un camarade.
+            5. 📝 Prochaine étape : Suggère de reprendre l'exercice dans quelques jours et d'expliquer la méthode à voix haute.
             """
 
-            model_bilan = genai.GenerativeModel("gemini-2.5-flash", system_instruction=instruction_metacognitive)
+            model_bilan = genai.GenerativeModel("gemini-2.0-flash", system_instruction=instruction_metacognitive)
             chat_bilan = model_bilan.start_chat(history=historique_complet)
             
             try:
                 reponse = chat_bilan.send_message("La session est terminée. Donne-moi mon bilan métacognitif ultra-concis selon tes instructions.")
-                
-                # Sécurisation de l'extraction de la réponse
-                texte_bilan_securise = extraire_json_securise(reponse)
-                st.success(texte_bilan_securise)
+                texte_bilan = reponse.text
+                st.success(texte_bilan)
                 
                 # --- EXPORT PDF ---
                 st.divider()
                 st.markdown("### 📥 Conserver une trace de ta session")
-                st.write("Télécharge ce bilan en PDF pour pouvoir le relire dans quelques jours et planifier ta prochaine révision (Spaced Practice).")
                 
                 matiere_pdf = st.session_state.get("matiere_nom", "Non spécifiée")
                 niveau_pdf = st.session_state.get("niveau_nom", "Non spécifié")
                 objectif_pdf = st.session_state.get("objectif", "Non spécifié")
                 
-                pdf_bytes = generer_pdf_bytes(texte_bilan_securise, matiere_pdf, niveau_pdf, objectif_pdf)
+                pdf_bytes = generer_pdf_bytes(texte_bilan, matiere_pdf, niveau_pdf, objectif_pdf)
                 
                 st.download_button(
                     label="📄 Télécharger mon Bilan (PDF)",
@@ -301,16 +218,10 @@ def afficher_bilan():
                 )
 
                 st.divider()
-                st.markdown("### 📊 Évaluation de l'outil")
-                st.write("Aide-nous à améliorer cette application en répondant à ce court questionnaire anonyme :")
-                iframe_wooclap = """<iframe allowfullscreen frameborder="0" height="100%" mozallowfullscreen src="https://app.wooclap.com/FBXMBG/questionnaires/69ad313cc7cb13027e159133" style="min-height: 550px; min-width: 300px" width="100%"></iframe>"""
-                components.html(iframe_wooclap, height=580)
-                st.divider()
                 if st.button("🔄 J'ai terminé, recommencer une nouvelle session", type="primary"):
                     st.session_state.session_active = False
                     st.session_state.messages = []
                     st.session_state.texte_cours_integral = ""
-                    st.session_state.lettre_attendue = "NA"
                     st.session_state.attendus_cours = None
                     st.rerun()
             except Exception as e:
@@ -347,10 +258,12 @@ Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter 
 - Dans tes réponses (feedback ou questions), utilise systématiquement le format LaTeX (encadré par $) pour afficher proprement les formules (ex: $\\frac{x}{2}$) afin d'alléger la charge cognitive visuelle de l'élève.
 
 # 🛑 RÈGLES DE SÉCURITÉ ET DE POSTURE
-- **Évaluation centrée sur la tâche :** Formule tes retours exclusivement sur la méthode et le résultat. Garde un ton neutre sur la personne (remplace les jugements personnels comme "Tu es brillant" ou "Tu es nul" par des constats comme "Ta méthode est efficace" ou "Ce calcul est inexact").
-- **Feedback factuel et spécifique :** Justifie systématiquement ton évaluation. Appuie toujours une validation ("C'est juste/faux") par une explication tirée du cours, et remplace les "Bravo !" vagues par la valorisation d'un effort ou d'une étape précise.
-- **Évaluation intra-individuelle :** Juge et valorise les progrès de l'élève uniquement par rapport à ses propres réponses précédentes.
-- **Ancrage documentaire strict (ANTI-HALLUCINATION) :** Utilise STRICTEMENT et EXCLUSIVEMENT les règles, concepts et vocabulaire présents dans le cours fourni. Si une donnée manque pour expliquer ou générer un exercice, déclare explicitement : "Non rapporté dans le document".
+- **Évaluation centrée sur la tâche :** Formule tes retours exclusivement sur la méthode et le résultat.
+- **Feedback factuel et spécifique :** Justifie systématiquement ton évaluation.
+- **Ancrage documentaire strict (ANTI-HALLUCINATION) :** Utilise STRICTEMENT et EXCLUSIVEMENT les règles, concepts et vocabulaire présents dans le cours fourni.
+
+# ⚙️ DIRECTIVE SYMBOLIQUE (QCM)
+- Si ton intervention se termine par une question à choix multiples (QCM), tu DOIS obligatoirement ajouter à la toute fin de ton texte la balise <lettre_attendue>X</lettre_attendue> (où X est la lettre correcte : A, B, C ou D). Ne mets rien si ce n'est pas un QCM.
 </socle_commun>\n\n"""
 
     # 2. BIFURCATION ARCHITECTURALE ABSOLUE
@@ -517,7 +430,6 @@ Choisis la stratégie la plus pertinente si elle n'est pas précisée, et conser
 </constitution_mode_b>\n\n"""
 
     return prompt_systeme
-
 # ==========================================
 # FONCTIONS TECHNIQUES & EXTRACTION
 # ==========================================
@@ -526,7 +438,7 @@ def initialiser_modele(api_key, niveau, objectif, strategie, attendus=None, mati
     instructions = generer_prompt_systeme(niveau, objectif, strategie, attendus, matiere_nom, niveau_nom)
     
     return genai.GenerativeModel(
-        model_name="gemini-2.5-flash", 
+        model_name="gemini-2.0-flash", 
         system_instruction=instructions,
         tools=[verifier_calcul_formel], 
         safety_settings={
@@ -537,14 +449,12 @@ def initialiser_modele(api_key, niveau, objectif, strategie, attendus=None, mati
         },
         generation_config=genai.GenerationConfig(
             temperature=0.2,          
-            top_p=0.8,                 
-            top_k=40,                
-            response_mime_type="application/json",
-            response_schema=ReflexionTuteur
+            top_p=0.8,                  
+            top_k=40
         )
     )
+
 def extraire_texte_pdf(uploaded_file):
-    """Extrait l'intégralité du texte d'un fichier PDF page par page."""
     texte_complet = ""
     try:
         pdf_reader = PyPDF2.PdfReader(uploaded_file)
@@ -561,26 +471,20 @@ def extraire_texte_pdf(uploaded_file):
 
 def generer_contexte_optimise(nouvel_input):
     contents = []
-    
-    # Injection sécurisée de la base de connaissances (limitée pour éviter la saturation API)
     if st.session_state.texte_cours_integral:
-        # On ne prend que les 10 000 premiers caractères pour garantir la stabilité du JSON
-        texte_limite = st.session_state.texte_cours_integral[:10000] 
-        contents.append({"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS (Extrait ciblé) :\n{texte_limite}"]})
+        # Slicing du contexte pour éviter la saturation de l'API (mur de contexte)
+        texte_limite = st.session_state.texte_cours_integral[:10000]
+        contents.append({"role": "user", "parts": [f"BASE DE CONNAISSANCES DU COURS :\n{texte_limite}"]})
         contents.append({"role": "model", "parts": ["J'ai bien mémorisé le contenu du cours. Je suis prêt à formuler mes questions en me basant strictement sur ces informations."] })
 
-    # Ajout de l'historique conversationnel récent
-    messages_api = [m for m in st.session_state.messages if not m.get("isMeta")]
-    historique_recent = messages_api[-MAX_HISTORIQUE_MESSAGES:]
-    for msg in historique_recent:
+    messages_api = st.session_state.messages[-MAX_HISTORIQUE_MESSAGES:]
+    for msg in messages_api:
         contents.append({"role": msg["role"], "parts": [msg["content"]]})
         
-    # Ajout de la nouvelle entrée de l'élève
     contents.append({"role": "user", "parts": [nouvel_input]})
     return contents
 
 def simuler_stream(texte):
-    """Simule un effet de frappe pour réduire l'impatience de l'élève."""
     for mot in texte.split(" "):
         yield mot + " "
         time.sleep(0.02)
@@ -592,18 +496,15 @@ st.title("🦉 Réviser avec les sciences cognitives")
 st.markdown("*Outil anonyme : Ne saisis aucune donnée personnelle dans ce chat.*")
 
 with st.sidebar:
-    # Remontée forcée du titre pour optimiser l'espace vertical
     st.markdown("<h3 style='margin-top: -40px;'>⚙️ Paramètres du cours</h3>", unsafe_allow_html=True)
     actif = st.session_state.get("session_active", False)
     
-    # 1. Empilement vertical pour Matière et Classe
     matieres_dispos = list(REFERENTIELS.keys()) if REFERENTIELS else ["Mathématiques", "Générique"]
     matiere_choisie = st.selectbox("Matière", matieres_dispos, disabled=actif)
     
     niveaux_scolaires = list(REFERENTIELS.get(matiere_choisie, {}).keys()) if REFERENTIELS else ["6ème", "5ème", "4ème", "3ème"]
     niveau_scolaire = st.selectbox("Classe", niveaux_scolaires, disabled=actif)
     
-    # 2. Scénarios (Menu déroulant avec vos phrases concises)
     st.markdown("### 🎯 Ton objectif")
     options_scenarios = [
         "🌱 Je découvre : mémoriser pas à pas",
@@ -614,7 +515,6 @@ with st.sidebar:
     ]
     choix_scenario = st.selectbox("Situation", options_scenarios, disabled=actif, label_visibility="collapsed")
     
-    # Mapping cognitif ajusté
     if "découvre" in choix_scenario:
         niv_e, obj_e, strat_v = "Novice", "Mode A : Mémorisation", "Classique"
     elif "révise" in choix_scenario:
@@ -626,7 +526,6 @@ with st.sidebar:
     elif "maîtrise" in choix_scenario:
         niv_e, obj_e, strat_v = "Avancé", "Mode B : Compréhension", "Effet_Protege"
     
-    # 3. Source du cours
     st.markdown("### 🧭 Support de cours")
     source = st.radio("Source", ["Fichier PDF", "Texte libre"], disabled=actif, horizontal=True, label_visibility="collapsed")
     
@@ -636,8 +535,6 @@ with st.sidebar:
     else:
         pdf_f = None
         txt_f = st.text_area("Colle ton texte ici :", height=120, disabled=actif)
-    
-    mode_debug = st.checkbox("Activer le mode Debug (IA)", value=False, disabled=actif)
     
     pret_a_demarrer = (pdf_f is not None) or (txt_f is not None and len(txt_f.strip()) > 10)
     
@@ -653,7 +550,6 @@ with st.sidebar:
                 st.session_state.niveau = niv_e
                 st.session_state.objectif = obj_e
                 st.session_state.strategie = strat_v
-                st.session_state.mode_debug = mode_debug
                 st.session_state.matiere_nom = matiere_choisie
                 st.session_state.niveau_nom = niveau_scolaire
                 st.session_state.attendus_cours = REFERENTIELS.get(matiere_choisie, {}).get(niveau_scolaire, None)
@@ -662,7 +558,7 @@ with st.sidebar:
             else:
                 st.stop()
         except KeyError:
-            st.error("⚠️ La clé API est introuvable dans l'onglet 'Secrets' de Streamlit Cloud.")
+            st.error("⚠️ La clé API est introuvable dans l'onglet 'Secrets'.")
         except Exception as e:
             st.error(f"Erreur : {e}")
 
@@ -683,83 +579,63 @@ if st.session_state.get("session_active"):
         st.session_state.get("niveau_nom", "Non spécifié")
     )
     
-    # Affichage de l'historique dans l'UI
+    # Affichage de l'historique
     for msg in st.session_state.messages:
-        if msg.get("isMeta"):
-            if st.session_state.get("mode_debug", False):
-                with st.expander("🧠 Méta-cognition de l'IA (Debug)", expanded=False):
-                    st.markdown(f"**Diagnostic :** {msg.get('diagnostic', 'N/A')}")
-                    st.markdown(f"**Stratégie :** {msg.get('strategie', 'N/A')}")
-                    st.markdown(f"**Concept évalué :** {msg.get('concept_actuel_evalue', 'N/A')}")
-                    st.markdown(f"**Concepts restants :** {msg.get('liste_concepts_restants_du_cours', 'N/A')}")
-        else:
-            with st.chat_message(msg["role"]): 
-                st.markdown(msg["content"])
+        with st.chat_message(msg["role"]): 
+            st.markdown(msg["content"])
             
     # Amorçage (1ère question)
     if len(st.session_state.messages) == 0:
         with st.chat_message("model"):
             with st.spinner("L'IA prépare sa stratégie pédagogique..."):
-                contexte = generer_contexte_optimise("Salut ! Je suis prêt, commence l'exercice sur le cours.")
+                contexte = generer_contexte_optimise("Salut ! Je suis prêt, commence l'exercice sur le cours en posant une première question.")
                 try:
-                    reponse = modele.generate_content(contexte)
-                    texte_json = extraire_json_securise(reponse)
+                    res = modele.generate_content(contexte)
+                    texte_brut = res.text
                     
-                    # Vérification explicite : si c'est la phrase de secours, on lève une erreur volontaire
-                    if "J'ai rencontré une brève difficulté technique" in texte_json:
-                         raise ValueError("L'API Gemini a retourné une réponse vide lors de l'amorçage. Cause probable : le texte du cours est trop long ou contient des caractères non supportés.")
-                    
-                    reflexion = ReflexionTuteur.model_validate_json(texte_json)
-                    st.session_state.lettre_attendue = reflexion.lettre_attendue_qcm
-                    st.session_state.messages.append({
-                        "role": "model", "content": "", "isMeta": True, 
-                        "diagnostic": reflexion.diagnostic_interne,
-                        "strategie": reflexion.strategie_choisie,
-                        "concept_actuel_evalue": reflexion.concept_actuel_evalue,
-                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours
-                    })
-                    st.write_stream(simuler_stream(reflexion.reponse_visible))
-                    st.session_state.messages.append({"role": "model", "content": reflexion.reponse_visible})
-                except Exception as e:
-                    # Affichage frontal de la vraie erreur pour diagnostic
-                    st.error(f"Erreur technique (Amorçage) : {e}")
+                    # Extraction de la balise cachée (QCM)
+                    import re
+                    match = re.search(r'<lettre_attendue>([A-D])</lettre_attendue>', texte_brut)
+                    if match:
+                        st.session_state.lettre_attendue = match.group(1)
+                        texte_final = re.sub(r'<lettre_attendue>[A-D]</lettre_attendue>', '', texte_brut).strip()
+                    else:
+                        st.session_state.lettre_attendue = "NA"
+                        texte_final = texte_brut
 
-    # ==========================================
-    # MODULE DE CALIBRATION MÉTACOGNITIVE
-    # ==========================================
+                    st.write_stream(simuler_stream(texte_final))
+                    st.session_state.messages.append({"role": "model", "content": texte_final})
+                except Exception as e:
+                    st.error(f"Erreur d'initialisation : {e}")
+
+    # Jauge de calibration
     certitude = None
-    # La jauge n'est sollicitée que pour les tâches d'ancrage (Mode A)
     if "Mémorisation" in st.session_state.objectif:
         st.markdown("<div class='syntax-help'>🚦 <b>Auto-évaluation :</b> Avant de valider, évalue la fiabilité de ta réponse.</div>", unsafe_allow_html=True)
         certitude = st.radio(
             "Certitude",
             ["🎲 Je réponds au hasard", "🤔 J'ai un doute", "✅ Je suis certain.e"],
-            index=None, # Force un choix actif de la part de l'élève
+            index=None,
             horizontal=True,
             label_visibility="collapsed"
         )
 
     # Interaction Élève -> Modèle
     if query := st.chat_input("Ex: La réponse est ..."):
-        
-        # Affichage de la réponse de l'élève dans l'interface
         st.chat_message("user").markdown(query)
         st.session_state.messages.append({"role": "user", "content": query})
         
         with st.chat_message("model"):
             with st.spinner("Analyse cognitive en cours..."):
-                
-                # 1. INJECTION DE LA DONNÉE MÉTACOGNITIVE
                 consigne_metacognitive = ""
                 if certitude:
                     consigne_metacognitive = f"\n\n[Certitude de l'élève : {certitude}]"
-                elif "Mémorisation" in st.session_state.objectif:
-                    consigne_metacognitive = f"\n\n[Certitude de l'élève : Non évaluée (Oubli de saisie)]"
 
-                # 2. JUGE DÉTERMINISTE (REGEX QCM)
+                # JUGE DÉTERMINISTE (REGEX QCM)
                 attendu = st.session_state.get("lettre_attendue", "NA")
                 consigne_juge = ""
                 if attendu in ["A", "B", "C", "D"]:
+                    import re
                     trouve = re.findall(r'\b[A-Da-d]\b', query)
                     if len(trouve) == 1:
                         l_eleve = trouve[0].upper()
@@ -768,69 +644,67 @@ if st.session_state.get("session_active"):
                         else:
                             consigne_juge = f"\n\n<juge_deterministe>INTERVENTION SYMBOLIQUE : L'élève a choisi {l_eleve}. C'est FAUX (la bonne était {attendu}). Applique un feedback de processus strict.</juge_deterministe>"
 
-                # Concaténation de la réponse, du juge et de la jauge de certitude
-                contexte = generer_contexte_optimise(query + consigne_juge + consigne_metacognitive)
+                contexte = generer_contexte_optimise(query + consigne_metacognitive + consigne_juge)
                 
-                # 3. APPEL IA (SYMPY TOOL CALLING)
-                res = modele.generate_content(contexte)
-                if res.candidates and res.candidates[0].content.parts:
-                    for part in res.candidates[0].content.parts:
-                        if part.function_call and part.function_call.name == "verifier_calcul_formel":
-                            fc = part.function_call
-                            args = {}
-                            try:
-                                for key in fc.args:
-                                    args[key] = fc.args[key]
-                            except Exception:
-                                pass
-                            
-                            # Exécution de la vérification symbolique
-                            v_res = verifier_calcul_formel(args.get("expression_prof", ""), args.get("expression_eleve", ""))
-                            
-                            # Sérialisation du dictionnaire Python en structure Protobuf
-                            from google.protobuf import struct_pb2
-                            s = struct_pb2.Struct()
-                            s.update(v_res)
-                            
-                            # Construction de la réponse d'outil validée
-                            part_response = genai.protos.Part(function_response=genai.protos.FunctionResponse(name="verifier_calcul_formel", response=s))
-                            contexte.append(res.candidates[0].content)
-                            contexte.append({"role": "user", "parts": [part_response]})
-                            
-                            # Relance de l'inférence pour générer le feedback JSON
-                            res = modele.generate_content(contexte)
-                            break
-
-                # 4. FILTRE EXÉCUTIF LOCAL (spaCy) ET AUTO-CORRECTION
+                # APPEL IA (AVEC SUPPORT SYMPY NÉGOCIÉ)
                 try:
-                    texte_json = extraire_json_securise(res)
-                    reflexion = ReflexionTuteur.model_validate_json(texte_json)
-                    texte_final = reflexion.reponse_visible
+                    res = modele.generate_content(contexte)
                     
+                    if res.candidates and res.candidates[0].content.parts:
+                        for part in res.candidates[0].content.parts:
+                            if part.function_call and part.function_call.name == "verifier_calcul_formel":
+                                fc = part.function_call
+                                args = {}
+                                try:
+                                    for key in fc.args:
+                                        args[key] = fc.args[key]
+                                except Exception:
+                                    pass
+                                
+                                v_res = verifier_calcul_formel(args.get("expression_prof", ""), args.get("expression_eleve", ""))
+                                
+                                from google.protobuf import struct_pb2
+                                s = struct_pb2.Struct()
+                                s.update(v_res)
+                                
+                                part_response = genai.protos.Part(function_response=genai.protos.FunctionResponse(name="verifier_calcul_formel", response=s))
+                                contexte.append(res.candidates[0].content)
+                                contexte.append({"role": "user", "parts": [part_response]})
+                                
+                                res = modele.generate_content(contexte)
+                                break
+
+                    # Filtre exécutif local et Extraction de la balise
+                    texte_brut = res.text
+                    import re
+                    match = re.search(r'<lettre_attendue>([A-D])</lettre_attendue>', texte_brut)
+                    if match:
+                        st.session_state.lettre_attendue = match.group(1)
+                        texte_final = re.sub(r'<lettre_attendue>[A-D]</lettre_attendue>', '', texte_brut).strip()
+                    else:
+                        st.session_state.lettre_attendue = "NA"
+                        texte_final = texte_brut
+
                     est_valide, motif_rejet = agent_critique.analyser(texte_final)
                     
                     if not est_valide:
                         contexte.append(res.candidates[0].content)
-                        alerte = f"\n\n<alerte_inhibition>ATTENTION (INHIBITION SYMBOLIQUE) : {motif_rejet} Corrige le champ 'reponse_visible' en conséquence (Garde le format JSON strict).</alerte_inhibition>"
+                        alerte = f"\n\n<alerte_inhibition>ATTENTION : {motif_rejet}</alerte_inhibition>"
                         contexte.append({"role": "user", "parts": [alerte]})
-                        
                         res_corrige = modele.generate_content(contexte)
-                        texte_json_corrige = extraire_json_securise(res_corrige)
-                        reflexion = ReflexionTuteur.model_validate_json(texte_json_corrige)
-                        texte_final = reflexion.reponse_visible
+                        
+                        # Ré-extraction si l'IA s'est auto-corrigée
+                        texte_brut_corrige = res_corrige.text
+                        match_corrige = re.search(r'<lettre_attendue>([A-D])</lettre_attendue>', texte_brut_corrige)
+                        if match_corrige:
+                            st.session_state.lettre_attendue = match_corrige.group(1)
+                            texte_final = re.sub(r'<lettre_attendue>[A-D]</lettre_attendue>', '', texte_brut_corrige).strip()
+                        else:
+                            st.session_state.lettre_attendue = "NA"
+                            texte_final = texte_brut_corrige
 
-                    st.session_state.lettre_attendue = reflexion.lettre_attendue_qcm
-                    st.session_state.messages.append({
-                        "role": "model", "content": "", "isMeta": True, 
-                        "diagnostic": reflexion.diagnostic_interne,
-                        "strategie": reflexion.strategie_choisie,
-                        "concept_actuel_evalue": reflexion.concept_actuel_evalue,
-                        "liste_concepts_restants_du_cours": reflexion.liste_concepts_restants_du_cours
-                    })
-                    
                     st.write_stream(simuler_stream(texte_final))
                     st.session_state.messages.append({"role": "model", "content": texte_final})
                     
-                    if st.session_state.get("mode_debug"): st.rerun()
                 except Exception as e:
-                    st.markdown("Oups, mon système de réflexion a eu un petit hoquet de formatage. Pourrais-tu reformuler ta réponse s'il te plaît ?")
+                    st.error(f"Erreur d'inférence : {e}")
