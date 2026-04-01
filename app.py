@@ -5,6 +5,7 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import PyPDF2
 import time
 import sys
+from generateur_latex import generer_pdf_latex_bytes
 import re  
 import subprocess
 import sympy as sp
@@ -108,16 +109,25 @@ Ta mission : Transformer le cours fourni en une **Fiche de Mémorisation Active*
 
 # 2. RÈGLES DE CONTENU (Le Cerveau)
 Applique strictement ces principes issus des sciences cognitives :
+
 - **Principe d'Information Minimale (CRUCIAL)** : 1 Ligne = 1 Seule Notion Atomique.
+
 - **CIBLAGE UNIQUE** : Formule des questions appelant un seul élément de réponse.
+
 - **Typologie des Questions** : Varie entre questions sémantiques, procédurales, de discrimination et de complétion.
+
 - **LE FEEDBACK DE PROCESSUS** : La 4ème colonne "Stratégie" sert exclusivement à guider la pensée en maintenant la réponse directe masquée (cibler la méthode, spécifique, engagement actif, non-jugeant).
+
 - **Procédures & Calculs** : Décris la méthode étape par étape. Exemple Numérique OBLIGATOIRE sur une ligne dédiée.
 
 # 3. RÈGLES TECHNIQUES (Le Code)
+
 - **Gabarit** : Utilise STRICTEMENT le code LaTeX ci-dessous.
+
 - **Maths** : Place toujours les formules et nombres dans des balises $ ... $. Échappe les caractères spéciaux (%, &, #).
+
 - **Anti-Hallucination** : Base-toi uniquement sur le cours fourni.
+
 - **Règle absolue** : Produis exclusivement le code LaTeX brut. Commence directement par \\documentclass et termine exactement par \\end{document}.
 
 \\documentclass[a4paper,11pt]{article}
@@ -129,18 +139,16 @@ Applique strictement ces principes issus des sciences cognitives :
 \\usepackage{amsmath}
 \\usepackage{longtable}
 \\usepackage{array}
-
 \\geometry{hmargin=1cm, vmargin=1.5cm}
-
 \\begin{document}
-
 \\begin{center}
+
     \\LARGE \\textbf{FICHE DE RÉVISION ACTIVE}\\\\[0.5em]
+
     \\large \\textbf{Auto-évaluation et Entraînement}
+
 \\end{center}
-
 \\vspace{0.5cm}
-
 \\renewcommand{\\arraystretch}{1.8}
 \\begin{longtable}{|p{2.5cm}|p{4.5cm}|p{4.5cm}|p{4.5cm}|}
     \\hline
@@ -149,46 +157,50 @@ Applique strictement ces principes issus des sciences cognitives :
     \\endhead
 
     % --- GESTION DES OBJECTIFS ---
+
     \\multicolumn{4}{|c|}{\\textbf{Objectif : {{INTITULÉ_OBJECTIF}}}} \\tabularnewline
-    \\hline
-    
+
+    \\hline 
+
     \\centering $\\square\\ \\square\\ \\square$ & {{QUESTION_ATOMIQUE}} & {{REPONSE_COURTE}} & \\footnotesize \\textit{{{FEEDBACK_PROCESSUS}}} \\tabularnewline
+
     \\hline
 
 \\end{longtable}
 
 \\end{document}
+
+"""
+\end{longtable}
+
+\end{document}
 """
 
 def traiter_generation_fiche():
-    """Gère l'appel API, le nettoyage regex et la compilation de la fiche mémo."""
+    """Coordonne la génération LLM, l'extraction du bloc formel et la compilation."""
     try:
         model = genai.GenerativeModel("gemini-2.5-flash") 
-        # Utilisation de la concaténation simple pour protéger la syntaxe LaTeX
         prompt_final = PROMPT_FICHE_MEMO + "\n\n# ENTRÉES\nCours à traiter :\n" + st.session_state.texte_cours_integral
         
-        with st.spinner("Construction de la fiche par l'IA..."):
+        with st.spinner("Conception de la fiche et compilation LaTeX en cours..."):
             response = model.generate_content(prompt_final)
-            raw_latex = response.text
+            raw_text = response.text
             
-            clean_latex = re.sub(r"```latex|```", "", raw_latex).strip()
+            # Isolement strict du code LaTeX (élimination des balises Markdown de l'IA)
+            clean_latex = re.sub(r"```latex|```", "", raw_text).strip()
             
             if "\\documentclass" not in clean_latex:
-                st.error("Format LaTeX invalide généré par l'IA. Merci de réessayer.")
-                return False # On retourne False pour bloquer le st.rerun()
+                st.error("Le modèle n'a pas produit un format LaTeX valide.")
+                return False
 
-            pdf_bytes = generer_pdf_bytes(
-                clean_latex, 
-                st.session_state.get("matiere_nom", "Mathématiques"), 
-                st.session_state.get("niveau_nom", "Collège"), 
-                "Fiche Mémo Active"
-            )
+            # Appel à la fonction contenant le sous-processus
+            pdf_bytes = generer_pdf_latex_bytes(clean_latex)
             
             st.session_state.fiche_memo_pdf = pdf_bytes
-            return True # Succès confirmé
+            return True
             
     except Exception as e:
-        st.error(f"Erreur lors de la génération : {str(e)}")
+        st.error(f"Erreur d'exécution : {str(e)}")
         return False
 
 # ==========================================
@@ -367,7 +379,8 @@ Ton intervention doit STRICTEMENT se limiter aux attendus suivants pour éviter 
 </socle_commun>\n\n"""
 
     # 2. BIFURCATION ARCHITECTURALE ABSOLUE
-   <system_prompt_sacha_effet_protege>
+    if strategie_generative == "Effet_Protege":
+        prompt_systeme += """<system_prompt_sacha_effet_protege>
 <contexte_pedagogique>
 Tu es dans le mode "Effet Protégé". L'utilisateur est l'élève tuteur.
 - Matière : {matiere_nom}
@@ -428,12 +441,11 @@ EXEMPLE ATTENDU (Le modèle reste dans son rôle, montre une erreur crédible et
 - Utilisateur : Pour additionner des fractions, il faut qu'elles aient le même dénominateur.
 - Modèle (BON) : Euh, attends... Pourquoi on s'embête avec ça ? Si j'ai 1/2 et 1/3, pourquoi je peux pas juste faire 1+1 en haut et 2+3 en bas ? Ça me paraît beaucoup plus simple.
 </few_shot_examples_structure>
-</system_prompt_sacha_effet_protege>
 
 # LA "CONSTITUTION" PÉDAGOGIQUE - MODE B : COMPRÉHENSION & TRANSFERT (Apprentissage Génératif)
 - Séquençage : L'utilisateur effectue cet exercice PENDANT l'étude, avec le document sous les yeux (à livre ouvert).
 - Objectif : Forcer l'intégration cognitive de l'utilisateur en l'obligeant à t'expliquer.
-</role_sacha>\n\n"""
+</system_prompt_sacha_effet_protege>\n\n"""
     else:
         prompt_systeme += """<role_tuteur>
 # RÔLE ET MISSION
