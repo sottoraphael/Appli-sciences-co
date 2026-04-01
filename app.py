@@ -699,10 +699,14 @@ if st.session_state.get("session_active"):
         with st.chat_message("model"):
             with st.spinner("L'IA prépare sa stratégie pédagogique..."):
                 contexte = generer_contexte_optimise("Salut ! Je suis prêt, commence l'exercice sur le cours.")
-                reponse = modele.generate_content(contexte)
                 try:
-                    # Utilisation sécurisée pour contourner l'erreur whichOneof
+                    reponse = modele.generate_content(contexte)
                     texte_json = extraire_json_securise(reponse)
+                    
+                    # Vérification explicite : si c'est la phrase de secours, on lève une erreur volontaire
+                    if "J'ai rencontré une brève difficulté technique" in texte_json:
+                         raise ValueError("L'API Gemini a retourné une réponse vide lors de l'amorçage. Cause probable : le texte du cours est trop long ou contient des caractères non supportés.")
+                    
                     reflexion = ReflexionTuteur.model_validate_json(texte_json)
                     st.session_state.lettre_attendue = reflexion.lettre_attendue_qcm
                     st.session_state.messages.append({
@@ -715,7 +719,8 @@ if st.session_state.get("session_active"):
                     st.write_stream(simuler_stream(reflexion.reponse_visible))
                     st.session_state.messages.append({"role": "model", "content": reflexion.reponse_visible})
                 except Exception as e:
-                    st.error(f"Erreur d'initialisation JSON : {e}")
+                    # Affichage frontal de la vraie erreur pour diagnostic
+                    st.error(f"Erreur technique (Amorçage) : {e}")
 
     # ==========================================
     # MODULE DE CALIBRATION MÉTACOGNITIVE
